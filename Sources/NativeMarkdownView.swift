@@ -133,9 +133,12 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     }
     
     private func syncTextContainerWidth() {
-        // 以 scrollView 可視內容寬度為準，避免 code block/table 變成「一個字寬」
-        let visibleWidth = scrollView.contentView.bounds.width
-        guard visibleWidth > 1 else { return }
+        // 以 scrollView 可視內容寬度為準，避免 code block/table 變成「一個字寬」。
+        // 注意：用 contentSize 比 bounds 更貼近實際可用寬度（會排除 scroller 佔用等）。
+        let visibleWidth = scrollView.contentSize.width
+        let insetWidth = textView.textContainerInset.width
+        let containerWidth = max(1, visibleWidth - insetWidth * 2)
+        guard containerWidth > 1 else { return }
         
         // 讓 textView 本身也有合理寬度
         var frame = textView.frame
@@ -145,7 +148,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         }
         
         if let container = textView.textContainer {
-            container.containerSize = NSSize(width: visibleWidth, height: CGFloat.greatestFiniteMagnitude)
+            container.containerSize = NSSize(width: containerWidth, height: CGFloat.greatestFiniteMagnitude)
             container.widthTracksTextView = true
             
             // 強制讓 layout manager 重新依新幾何排版（修正「變寬了但還是每字換行」的殘留狀態）
@@ -296,6 +299,45 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         let theme = NativeMarkdownTheme(zoom: 1.0)
         let attributed = NativeMarkdownParser(theme: theme, baseURL: nil).render(markdown: markdown)
         return attributed.string
+    }
+
+    /// 不啟動 GUI 的情況下驗證 NSTextView/NSScrollView 寬度骨架是否正常。
+    /// 目標：避免回歸成「每字換行」（通常是 text container 寬度被錯誤同步成極小值）。
+    static func debugSkeletonCheck() -> String {
+        // 保守起見先初始化 NSApplication（即使不進 event loop）
+        _ = NSApplication.shared
+
+        let view = NativeMarkdownView(frame: NSRect(x: 0, y: 0, width: 900, height: 700))
+        view.loadWelcomePage()
+
+        // 模擬縮放視窗寬度（常見觸發點：scrollbar/clipView bounds 變化）
+        let widths: [CGFloat] = [900, 600, 360, 820]
+        var rows: [String] = []
+
+        var ok = true
+        for w in widths {
+            view.frame = NSRect(x: 0, y: 0, width: w, height: 700)
+            view.layoutSubtreeIfNeeded()
+            view.syncTextContainerWidth()
+
+            let visibleWidth = view.scrollView.contentSize.width
+            let insetWidth = view.textView.textContainerInset.width
+            let expected = max(1, visibleWidth - insetWidth * 2)
+            let actual = view.textView.textContainer?.containerSize.width ?? -1
+
+            rows.append(String(format: "width=%.0f visible=%.2f inset=%.2f expected=%.2f actual=%.2f", w, visibleWidth, insetWidth, expected, actual))
+
+            // 容忍少量誤差（浮點/布局時序）
+            if !(actual > 50 && abs(actual - expected) < 3.0) {
+                ok = false
+            }
+        }
+
+        if ok {
+            return "SKELETON_OK\n" + rows.joined(separator: "\n")
+        } else {
+            return "SKELETON_FAIL\n" + rows.joined(separator: "\n")
+        }
     }
 }
 

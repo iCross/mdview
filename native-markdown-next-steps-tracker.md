@@ -41,8 +41,16 @@
 
 ## 進度
 - [x] 階段A：參考 repo 已 clone + 筆記已補到 `README.md`
-- [ ] 階段B：方向決策（Markdown/Highlight）文件化 + commit
+- [x] 階段B：方向決策（Markdown/Highlight）文件化 + commit
 - [ ] 階段C：Scroll/寬度骨架自動驗證與修正 + commit
 - [ ] 階段D：Notes 風格 typography + commit
 - [ ] 階段E：導入 AST 管線（SwiftPM + swift-markdown）+ commit
 - [ ] 階段F：Highlightr（含 incremental highlight 路徑）+ commit
+
+## 階段C：骨架觀察（進行中）
+- 本 repo `NativeMarkdownView` 已採 TextKit 1 `NSTextView` + `NSScrollView`，並用 `widthTracksTextView` + 監聽 `NSClipView` 的 bounds/frame 變化來同步 `textContainer.containerSize`（避免寬度變化後殘留「每字換行」狀態）。
+- STTextView（TextKit 2）屬於不同架構；它內部 `textContainer.widthTracksTextView = false`，由自訂 layout/container 管理，因此這裡僅能借鑑「概念/坑」，不直接複製其設定。
+
+### 本階段變更（已完成）
+- `syncTextContainerWidth()` 改用 `scrollView.contentSize.width` 作為可用寬度，並扣掉 `textContainerInset` 以得到實際 `textContainer.containerSize.width`。
+- 新增 CLI：`--native-skeleton-check`（不啟動 GUI），會模擬多次視窗寬度變化並輸出 `SKELETON_OK/FAIL` 與每次同步結果，作為回歸測試基準。

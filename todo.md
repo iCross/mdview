@@ -67,7 +67,7 @@ gh repo clone krzyzanowskim/STTextView
 - [x] 已在 README 補上「參考 repo 筆記」摘要（Markdown AST / Highlightr / sizing / 授權注意事項）
 
 ### 優先驗證項目（比「功能加更多」更重要）
-- [ ] Scroll/寬度骨架：`NSTextView` 放進 `NSScrollView`，視窗縮放時**不會變成每字換行**、不會出現水平捲動
+- [x] Scroll/寬度骨架：`NSTextView` 放進 `NSScrollView`，視窗縮放時**不會變成每字換行**、不會出現水平捲動（新增 `--native-skeleton-check` 自動驗證）
 - [ ] Notes 風格 typography：`textContainerInset` + `NSParagraphStyle`（lineHeight/spacing 策略）一致套用（含貼上內容）
 - [ ] Markdown→AttributedString：表格/圖片/連結/引用/code block 的 block-level 與 inline 樣式一致
 - [ ] incremental highlight：只改 attributes、不改 characters；避免 `didProcessEditing` crash 類型問題

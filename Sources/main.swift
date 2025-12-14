@@ -22,6 +22,7 @@ func printHelp() {
       --native-dump <file.md>  不啟動 GUI，輸出 Native 解析結果（供測試用）
       --native-render-text <file.md>
                               不啟動 GUI，輸出 Native 渲染後的純文字（供測試用）
+      --native-skeleton-check  不啟動 GUI，驗證 NSTextView/NSScrollView 寬度骨架
     """)
 }
 
@@ -79,6 +80,11 @@ if args.contains("--native-render-text"), let path = parseValueAfterFlag("--nati
         print("ERROR: 無法讀取檔案: \(path)")
         exit(2)
     }
+}
+
+if args.contains("--native-skeleton-check") {
+    print(NativeMarkdownView.debugSkeletonCheck())
+    exit(0)
 }
 
 // 建立應用程式實例

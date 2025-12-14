@@ -299,6 +299,13 @@ func testCompilation(_ runner: TestRunner) {
                output.contains("引用區塊") &&
                output.contains("待辦清單")
     }
+
+    // Native skeleton：驗證 NSTextView/NSScrollView 寬度骨架會正確同步（避免回歸成每字換行）
+    runner.run("mdviewer --native-skeleton-check 會回傳 SKELETON_OK") {
+        let basePath = FileManager.default.currentDirectoryPath
+        let result = runProcess("\(basePath)/mdviewer", ["--native-skeleton-check"], timeoutSeconds: 2.0)
+        return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SKELETON_OK")
+    }
 }
 
 // MARK: - FileHandler 單元測試

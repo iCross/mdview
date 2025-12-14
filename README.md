@@ -247,4 +247,7 @@ swiftc -o mdviewer Sources/*.swift -framework AppKit -framework WebKit
 
 # Native 渲染後純文字（用於驗證 fenced code block 不會吃掉後續內容）
 ./mdviewer --native-render-text test.md
+
+# Native 寬度骨架檢查（不啟動 GUI）
+./mdviewer --native-skeleton-check
 ```
