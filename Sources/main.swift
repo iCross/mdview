@@ -16,6 +16,9 @@ func printHelp() {
       --native                 使用原生渲染器（NSTextView）
       --webkit                 使用 WebKit 渲染器（預設）
       --renderer=native|webkit 指定渲染器
+      --native-pipeline=regex|ast
+                              指定 Native Markdown 管線（預設 regex；ast 會在遇到 table/task/image 時 fallback）
+      --native-ast             等同 --native-pipeline=ast
       --smoke-test             GUI smoke test（建立視窗後自動退出）
 
     Debug/Testing:
@@ -33,7 +36,17 @@ func parseValueAfterFlag(_ flag: String, in args: [String]) -> String? {
     return args[next]
 }
 
+func parseNativePipeline(in args: [String]) -> NativeMarkdownPipeline {
+    if args.contains("--native-ast") { return .ast }
+    if let pipelineArg = args.first(where: { $0.hasPrefix("--native-pipeline=") }) {
+        let value = pipelineArg.replacingOccurrences(of: "--native-pipeline=", with: "").lowercased()
+        return NativeMarkdownPipeline(rawValue: value) ?? .regex
+    }
+    return .regex
+}
+
 let args = CommandLine.arguments
+let nativePipeline = parseNativePipeline(in: args)
 
 if args.contains("--help") || args.contains("-h") {
     printHelp()
@@ -65,7 +78,7 @@ if args.contains("--native-dump"), let path = parseValueAfterFlag("--native-dump
 if let dumpArg = args.first(where: { $0.hasPrefix("--native-render-text=") }) {
     let path = dumpArg.replacingOccurrences(of: "--native-render-text=", with: "")
     if let content = try? String(contentsOfFile: path, encoding: .utf8) {
-        print(NativeMarkdownView.debugRenderPlainText(markdown: content))
+        print(NativeMarkdownView.debugRenderPlainText(markdown: content, pipeline: nativePipeline))
         exit(0)
     } else {
         print("ERROR: 無法讀取檔案: \(path)")
@@ -74,7 +87,7 @@ if let dumpArg = args.first(where: { $0.hasPrefix("--native-render-text=") }) {
 }
 if args.contains("--native-render-text"), let path = parseValueAfterFlag("--native-render-text", in: args) {
     if let content = try? String(contentsOfFile: path, encoding: .utf8) {
-        print(NativeMarkdownView.debugRenderPlainText(markdown: content))
+        print(NativeMarkdownView.debugRenderPlainText(markdown: content, pipeline: nativePipeline))
         exit(0)
     } else {
         print("ERROR: 無法讀取檔案: \(path)")

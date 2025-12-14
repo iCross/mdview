@@ -3,6 +3,8 @@
 # Build outputs
 mdviewer
 mdviewer.dSYM/
+.build/
+.swiftpm/
 
 # Reference repos (cloned locally for comparison; do not commit)
 Highlightr/

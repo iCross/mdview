@@ -368,7 +368,13 @@ class MarkdownView: NSView, MarkdownRenderable {
     }
     
     private func applyZoom() {
-        webView.pageZoom = currentZoomLevel
+        if #available(macOS 11.0, *) {
+            webView.pageZoom = currentZoomLevel
+        } else {
+            // macOS 10.15：WKWebView 尚無 pageZoom，改用 magnification
+            let center = CGPoint(x: webView.bounds.midX, y: webView.bounds.midY)
+            webView.setMagnification(currentZoomLevel, centeredAt: center)
+        }
     }
     
     // MARK: - Drag and Drop

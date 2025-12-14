@@ -23,19 +23,22 @@ all: debug
 # Debug 版本
 debug: $(SOURCES)
 	@echo "🔨 編譯 Debug 版本..."
-	@perl -e 'alarm shift; exec @ARGV' 300 swiftc $(DEBUG_FLAGS) -o $(APP_NAME) $(SOURCES) $(FRAMEWORKS)
+	@perl -e 'alarm shift; exec @ARGV' 300 swift build -c debug --product $(APP_NAME)
+	@cp -f .build/debug/$(APP_NAME) ./$(APP_NAME)
 	@echo "✅ 編譯完成: ./$(APP_NAME)"
 
 # Release 版本
 release: $(SOURCES)
 	@echo "🚀 編譯 Release 版本..."
-	@perl -e 'alarm shift; exec @ARGV' 300 swiftc $(RELEASE_FLAGS) -o $(APP_NAME) $(SOURCES) $(FRAMEWORKS)
+	@perl -e 'alarm shift; exec @ARGV' 300 swift build -c release --product $(APP_NAME)
+	@cp -f .build/release/$(APP_NAME) ./$(APP_NAME)
 	@echo "✅ 編譯完成: ./$(APP_NAME)"
 
 # 清除編譯產物
 clean:
 	@echo "🧹 清除編譯產物..."
 	trash -F $(APP_NAME)
+	trash -F .build
 	@echo "✅ 清除完成"
 
 # 執行應用程式（使用測試檔案）

@@ -42,12 +42,12 @@
 ## 進度
 - [x] 階段A：參考 repo 已 clone + 筆記已補到 `README.md`
 - [x] 階段B：方向決策（Markdown/Highlight）文件化 + commit
-- [ ] 階段C：Scroll/寬度骨架自動驗證與修正 + commit
-- [ ] 階段D：Notes 風格 typography + commit
-- [ ] 階段E：導入 AST 管線（SwiftPM + swift-markdown）+ commit
+- [x] 階段C：Scroll/寬度骨架自動驗證與修正 + commit
+- [x] 階段D：Notes 風格 typography + commit
+- [x] 階段E：導入 AST 管線（SwiftPM + swift-markdown）+ commit
 - [ ] 階段F：Highlightr（含 incremental highlight 路徑）+ commit
 
-## 階段C：骨架觀察（進行中）
+## 階段C：骨架（已完成）
 - 本 repo `NativeMarkdownView` 已採 TextKit 1 `NSTextView` + `NSScrollView`，並用 `widthTracksTextView` + 監聽 `NSClipView` 的 bounds/frame 變化來同步 `textContainer.containerSize`（避免寬度變化後殘留「每字換行」狀態）。
 - STTextView（TextKit 2）屬於不同架構；它內部 `textContainer.widthTracksTextView = false`，由自訂 layout/container 管理，因此這裡僅能借鑑「概念/坑」，不直接複製其設定。
 
@@ -55,6 +55,12 @@
 - `syncTextContainerWidth()` 改用 `scrollView.contentSize.width` 作為可用寬度，並扣掉 `textContainerInset` 以得到實際 `textContainer.containerSize.width`。
 - 新增 CLI：`--native-skeleton-check`（不啟動 GUI），會模擬多次視窗寬度變化並輸出 `SKELETON_OK/FAIL` 與每次同步結果，作為回歸測試基準。
 
-## 階段D：typography（進行中）
+## 階段D：typography（已完成）
 - 將段落樣式集中為 Notes 風格的 `NSParagraphStyle`（lineHeightMultiple/lineSpacing/paragraphSpacing），並把段落分隔改為「單一換行 + paragraphSpacing」。
 - 設定 `NSTextContainer.lineFragmentPadding = 0`，避免左右 padding 與 `textContainerInset` 疊加造成視覺不一致。
+
+## 階段E：AST 管線（已完成）
+- 新增 `Package.swift`，Makefile 改為預設走 SwiftPM（`swift build`）以支援外部依賴（先導入 `swift-markdown`）。
+- 新增 `ASTMarkdownRenderer`（swift-markdown AST → `NSAttributedString`），並加入 `--native-pipeline=regex|ast` / `--native-ast` 切換。
+- 採保守策略：遇到 GFM table/task/image 等尚未完全對齊的語法，會自動 fallback 到既有 `NativeMarkdownParser`，避免功能倒退。
+- 測試補齊：新增 `--native-pipeline=ast --native-render-text` 用例，確保 AST 模式至少可啟動且 fallback 正常。

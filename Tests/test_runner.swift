@@ -300,6 +300,17 @@ func testCompilation(_ runner: TestRunner) {
                output.contains("待辦清單")
     }
 
+    // AST pipeline：至少應能啟動並在遇到 table/task/image 時自動 fallback（不應影響輸出）
+    runner.run("mdviewer --native-pipeline=ast --native-render-text 可正常輸出") {
+        let basePath = FileManager.default.currentDirectoryPath
+        let result = runProcess("\(basePath)/mdviewer", ["--native-pipeline=ast", "--native-render-text", "\(basePath)/test.md"], timeoutSeconds: 2.0)
+        let output = result.output
+        return !result.didTimeout && result.terminationStatus == 0 &&
+               output.contains("表格範例") &&
+               output.contains("引用區塊") &&
+               output.contains("待辦清單")
+    }
+
     // Native skeleton：驗證 NSTextView/NSScrollView 寬度骨架會正確同步（避免回歸成每字換行）
     runner.run("mdviewer --native-skeleton-check 會回傳 SKELETON_OK") {
         let basePath = FileManager.default.currentDirectoryPath

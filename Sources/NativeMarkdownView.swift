@@ -3,6 +3,12 @@
 
 import AppKit
 import Foundation
+import Markdown
+
+enum NativeMarkdownPipeline: String {
+    case regex = "regex"
+    case ast = "ast"
+}
 
 /// 使用 NSTextView 以 NSAttributedString 呈現 Markdown。
 /// 設計目標：較低常駐成本、快速啟動、無 WebKit/JS 依賴。
@@ -23,6 +29,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     private var lastMarkdownSource: String?
     private var isShowingWelcome: Bool = true
     private var documentURL: URL?
+    private var pipeline: NativeMarkdownPipeline = .regex
     
     private var clipViewBoundsObserver: NSObjectProtocol?
     private var clipViewFrameObserver: NSObjectProtocol?
@@ -163,6 +170,10 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     func setDocumentURL(_ url: URL?) {
         documentURL = url
     }
+
+    func setPipeline(_ pipeline: NativeMarkdownPipeline) {
+        self.pipeline = pipeline
+    }
     
     func renderMarkdown(_ content: String) {
         lastMarkdownSource = content
@@ -170,7 +181,12 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         
         let theme = NativeMarkdownTheme(zoom: currentZoomLevel)
         let baseURL = documentURL?.deletingLastPathComponent()
-        let attributed = NativeMarkdownParser(theme: theme, baseURL: baseURL).render(markdown: content)
+        let attributed: NSAttributedString
+        if pipeline == .ast, ASTMarkdownRenderer.canRender(markdown: content) {
+            attributed = ASTMarkdownRenderer(theme: theme).render(markdown: content)
+        } else {
+            attributed = NativeMarkdownParser(theme: theme, baseURL: baseURL).render(markdown: content)
+        }
         
         // 將結果塞入 textStorage
         textView.textStorage?.setAttributedString(attributed)
@@ -297,9 +313,14 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     }
     
     /// 不啟動 GUI 的情況下輸出 Native 解析後的純文字（用於驗證 fenced code block 後續內容不會被吃掉）。
-    static func debugRenderPlainText(markdown: String) -> String {
+    static func debugRenderPlainText(markdown: String, pipeline: NativeMarkdownPipeline = .regex) -> String {
         let theme = NativeMarkdownTheme(zoom: 1.0)
-        let attributed = NativeMarkdownParser(theme: theme, baseURL: nil).render(markdown: markdown)
+        let attributed: NSAttributedString
+        if pipeline == .ast, ASTMarkdownRenderer.canRender(markdown: markdown) {
+            attributed = ASTMarkdownRenderer(theme: theme).render(markdown: markdown)
+        } else {
+            attributed = NativeMarkdownParser(theme: theme, baseURL: nil).render(markdown: markdown)
+        }
         return attributed.string
     }
 
@@ -345,7 +366,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
 
 // MARK: - Theme
 
-private struct NativeMarkdownTheme {
+struct NativeMarkdownTheme {
     let zoom: Double
     
     // 基本文字尺寸（會乘上 zoom）

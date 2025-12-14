@@ -42,6 +42,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return .webKit
     }
+
+    private var preferredNativePipeline: NativeMarkdownPipeline {
+        // 支援：
+        // - --native-pipeline=regex|ast
+        // - --native-ast（等同 ast）
+        let args = CommandLine.arguments
+        if args.contains("--native-ast") { return .ast }
+        if let pipelineArg = args.first(where: { $0.hasPrefix("--native-pipeline=") }) {
+            let value = pipelineArg.replacingOccurrences(of: "--native-pipeline=", with: "").lowercased()
+            return NativeMarkdownPipeline(rawValue: value) ?? .regex
+        }
+        return .regex
+    }
     
     // MARK: - NSApplicationDelegate
     
@@ -179,6 +192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 nativeMarkdownView.frame = contentView.bounds
             }
+            nativeMarkdownView.setPipeline(preferredNativePipeline)
             view = nativeMarkdownView
         }
         
@@ -251,7 +265,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc func openFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "md")!, .init(filenameExtension: "markdown")!]
+        if #available(macOS 11.0, *) {
+            panel.allowedContentTypes = [.init(filenameExtension: "md")!, .init(filenameExtension: "markdown")!]
+        } else {
+            panel.allowedFileTypes = ["md", "markdown"]
+        }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         

@@ -231,7 +231,9 @@ MIT License
 
 ## 開發筆記
 
-此專案使用 `swiftc` 命令列工具編譯，不依賴 Xcode 專案檔案。
+此專案預設使用 **Swift Package Manager** 編譯（`Package.swift` + `swift build`），因此可以乾淨地引入外部依賴（例如 `swift-markdown`、後續的 Highlightr）。
+
+若你只想快速理解「最小化 swiftc 編譯」概念，下面仍保留舊的參考指令（但不再是本 repo 預設建置路徑）。
 
 ```bash
 swiftc -o mdviewer Sources/*.swift -framework AppKit -framework WebKit
@@ -247,6 +249,9 @@ swiftc -o mdviewer Sources/*.swift -framework AppKit -framework WebKit
 
 # Native 渲染後純文字（用於驗證 fenced code block 不會吃掉後續內容）
 ./mdviewer --native-render-text test.md
+
+# Native AST 管線（遇到 table/task/image 會 fallback）
+./mdviewer --native-pipeline=ast --native-render-text test.md
 
 # Native 寬度骨架檢查（不啟動 GUI）
 ./mdviewer --native-skeleton-check
