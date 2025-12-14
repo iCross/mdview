@@ -1,0 +1,71 @@
+# macOS Markdown Viewer - 開發進度追蹤
+
+## 階段 1：基礎架構建立
+- [x] 建立專案結構 (Sources/, Resources/)
+- [x] 建立 Makefile
+- [x] 建立 todo.md 追蹤進度
+- [x] 建立基本 macOS 視窗應用
+
+## 階段 2：Markdown 渲染核心
+- [x] 整合 WKWebView
+- [x] 建立 HTML 渲染模板（內嵌於 MarkdownView.swift）
+- [x] 整合 marked.js（透過 CDN）
+- [x] 整合 highlight.js（透過 CDN）
+
+## 階段 3：檔案處理與 UI 整合
+- [x] 實作檔案讀取功能
+- [x] 整合檔案拖放功能
+- [x] 檔案變更自動重新載入
+
+## 階段 4：進階功能
+- [x] 選單列整合 (File, Edit, View, Window, Help)
+- [x] 深色模式支援（自動跟隨系統設定）
+- [x] 縮放功能（放大/縮小/實際大小）
+- [x] 說明對話框
+
+## 階段 5：打包與測試
+- [x] 完善編譯腳本 (Makefile)
+- [x] `make test` 先建置再執行測試（避免測到舊 binary）
+- [x] 建立測試用 Markdown 檔案 (test.md)
+- [x] 撰寫 README.md
+- [x] Makefile 增加合理 timeout（build/run 避免卡住）
+
+## 階段 6（選用）：輕量化渲染路線（NSTextView / NSAttributedString）
+- [x] 新增原生渲染元件（`NativeMarkdownView.swift`），以 `NSTextView` 顯示內容（不使用 `WKWebView`）
+- [x] 決定 Markdown 解析策略（簡化 parser + regex）
+- [x] 實作 code block 語法高亮（regex 上色）
+- [x] 原生表格支援（`NSTextTable` / `NSTextTableBlock`）
+- [x] 原生圖片支援（`NSTextAttachment`；支援相對/絕對路徑，遠端圖若可載入則顯示）
+- [x] AppDelegate 切換渲染器（WebKit / Native），並維持拖放、檔案監控、縮放等既有功能
+- [x] CLI 參數：新增 `--help` / `--native-dump`（便於測試與除錯）
+- [x] 修正 fenced code block 解析：避免結束 ``` 後誤把 closing fence 當成下一段 opening fence（修復 JS 區塊後內容不顯示）
+- [x] 修正 Native code block/quote 寬度：`NSTextBlock.setContentWidth(100%, ...)` 避免每字換行
+- [x] 修正 Native `NSTextView` 寬度同步：監聽 `NSClipView` bounds/frame 變化並強制 reflow
+- [x] 測試補齊：新增 `--help` / `--native-dump` 相關測試（避免回歸）
+- [x] 測試補齊：新增 `--native-render-text`（驗證 fenced code block 後續內容仍會被渲染）
+- [x] 測試補齊：子行程統一 timeout/kill（避免測試卡死）
+- [ ] 若完全移除 WebKit：更新 Makefile 的 FRAMEWORKS 與 Sources 清單（本次仍保留 WebKit 路線）
+
+## 已完成功能
+- 基本 Markdown 渲染
+- GitHub Flavored Markdown 支援
+- 程式碼語法高亮
+- 深色/淺色模式自動切換
+- 檔案拖放支援
+- 檔案變更自動重新載入
+- 完整選單系統
+- 快捷鍵支援
+- 縮放功能
+
+## 使用方式
+```bash
+# 編譯
+make debug
+
+# 執行
+./mdviewer test.md
+```
+
+## 完成日期
+開始日期: 2024-12-14
+完成日期: 2024-12-14
