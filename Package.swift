@@ -12,12 +12,15 @@ let package = Package(
     dependencies: [
         // AST-based Markdown parsing (CommonMark + extensions where supported)
         .package(url: "https://github.com/swiftlang/swift-markdown.git", branch: "main"),
+        // Syntax highlighting (highlight.js via JavaScriptCore)
+        .package(url: "https://github.com/raspu/Highlightr.git", branch: "master"),
     ],
     targets: [
         .executableTarget(
             name: "mdviewer",
             dependencies: [
                 .product(name: "Markdown", package: "swift-markdown"),
+                .product(name: "Highlightr", package: "Highlightr"),
             ],
             path: "Sources",
             linkerSettings: [

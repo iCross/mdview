@@ -2,6 +2,7 @@
 // macOS Markdown Viewer - 應用程式入口點
 
 import AppKit
+import Highlightr
 
 func printHelp() {
     let exe = (CommandLine.arguments.first as NSString?)?.lastPathComponent ?? "mdviewer"
@@ -26,6 +27,7 @@ func printHelp() {
       --native-render-text <file.md>
                               不啟動 GUI，輸出 Native 渲染後的純文字（供測試用）
       --native-skeleton-check  不啟動 GUI，驗證 NSTextView/NSScrollView 寬度骨架
+      --highlightr-check       不啟動 GUI，驗證 Highlightr（bundle resources/JSCore）可用
     """)
 }
 
@@ -98,6 +100,23 @@ if args.contains("--native-render-text"), let path = parseValueAfterFlag("--nati
 if args.contains("--native-skeleton-check") {
     print(NativeMarkdownView.debugSkeletonCheck())
     exit(0)
+}
+
+if args.contains("--highlightr-check") {
+    guard let hl = Highlightr() else {
+        print("HIGHLIGHTR_FAIL")
+        exit(2)
+    }
+    _ = hl.setTheme(to: "paraiso-light")
+    hl.theme.setCodeFont(NSFont.monospacedSystemFont(ofSize: 13, weight: .regular))
+    let sample = "let x = 1\nprint(x)\n"
+    if hl.highlight(sample, as: "swift", fastRender: true) != nil {
+        print("HIGHLIGHTR_OK")
+        exit(0)
+    } else {
+        print("HIGHLIGHTR_FAIL")
+        exit(1)
+    }
 }
 
 // 建立應用程式實例

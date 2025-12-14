@@ -132,7 +132,7 @@ markdown_swift/
   - **表格**: `NSTextTable` / `NSTextTableBlock`
   - **圖片**: `NSTextAttachment`（支援相對/絕對路徑）
   - **區塊樣式**: `NSTextBlock`（code block / quote）
-  - **語法高亮**: regex 上色（可再升級為 `NSTextStorageDelegate` 增量高亮）
+  - **語法高亮**: code block 優先使用 Highlightr（highlight.js via JavaScriptCore）；另提供 `NSTextStorageDelegate` 的增量高亮路徑（供 Editor 化時使用）
 - **檔案監控**: DispatchSourceFileSystemObject
 
 ## Native renderer（NSTextView）現況與後續方向
@@ -255,4 +255,7 @@ swiftc -o mdviewer Sources/*.swift -framework AppKit -framework WebKit
 
 # Native 寬度骨架檢查（不啟動 GUI）
 ./mdviewer --native-skeleton-check
+
+# Highlightr 依賴檢查（不啟動 GUI）
+./mdviewer --highlightr-check
 ```

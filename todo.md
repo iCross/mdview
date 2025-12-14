@@ -69,13 +69,13 @@ gh repo clone krzyzanowskim/STTextView
 ### 優先驗證項目（比「功能加更多」更重要）
 - [x] Scroll/寬度骨架：`NSTextView` 放進 `NSScrollView`，視窗縮放時**不會變成每字換行**、不會出現水平捲動（新增 `--native-skeleton-check` 自動驗證）
 - [x] Notes 風格 typography：`textContainerInset` + `NSParagraphStyle`（lineHeight/spacing 策略）一致套用（Reader 模式為主；`NSTextContainer.lineFragmentPadding = 0`）
-- [ ] Markdown→AttributedString：表格/圖片/連結/引用/code block 的 block-level 與 inline 樣式一致
-- [ ] incremental highlight：只改 attributes、不改 characters；避免 `didProcessEditing` crash 類型問題
+- [x] Markdown→AttributedString：表格/圖片/連結/引用/code block 的 block-level 與 inline 樣式一致（Native parser 已支援；AST 模式遇到未覆蓋語法會 fallback）
+- [x] incremental highlight：只改 attributes、不改 characters；避免 `didProcessEditing` crash 類型問題（新增 `IncrementalSyntaxHighlighter`；使用 Highlightr 產生 attributes）
 
 ### AST 管線導入（中期）
 - [x] 新增 `Package.swift` 並讓 Makefile 預設走 SwiftPM（`swift build`）以支援 `swift-markdown`
 - [x] Native renderer 支援 `--native-pipeline=regex|ast`（`--native-ast`）切換；遇到 table/task/image 會 fallback 到既有 parser
-- [ ] timeout 文化：所有 build/test/子行程都要有 timeout（避免卡住）
+- [x] timeout 文化：所有 build/test/子行程都要有 timeout（避免卡住；Makefile alarm + 測試子行程 timeout/kill）
 
 ### GitHub 搜尋捷徑（新對話可直接貼這些關鍵字）
 - [ ] `language:Swift NSTextView NSScrollView widthTracksTextView`

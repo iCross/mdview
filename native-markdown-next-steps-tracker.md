@@ -45,7 +45,7 @@
 - [x] 階段C：Scroll/寬度骨架自動驗證與修正 + commit
 - [x] 階段D：Notes 風格 typography + commit
 - [x] 階段E：導入 AST 管線（SwiftPM + swift-markdown）+ commit
-- [ ] 階段F：Highlightr（含 incremental highlight 路徑）+ commit
+- [x] 階段F：Highlightr（含 incremental highlight 路徑）+ commit
 
 ## 階段C：骨架（已完成）
 - 本 repo `NativeMarkdownView` 已採 TextKit 1 `NSTextView` + `NSScrollView`，並用 `widthTracksTextView` + 監聽 `NSClipView` 的 bounds/frame 變化來同步 `textContainer.containerSize`（避免寬度變化後殘留「每字換行」狀態）。
@@ -64,3 +64,8 @@
 - 新增 `ASTMarkdownRenderer`（swift-markdown AST → `NSAttributedString`），並加入 `--native-pipeline=regex|ast` / `--native-ast` 切換。
 - 採保守策略：遇到 GFM table/task/image 等尚未完全對齊的語法，會自動 fallback 到既有 `NativeMarkdownParser`，避免功能倒退。
 - 測試補齊：新增 `--native-pipeline=ast --native-render-text` 用例，確保 AST 模式至少可啟動且 fallback 正常。
+
+## 階段F：Highlightr（已完成）
+- Native code block 改為優先使用 Highlightr（失敗則 fallback regex），提升語法高亮一致性。
+- 新增 `--highlightr-check`（不啟動 GUI）驗證 SwiftPM resource bundle（highlight.min.js / CSS themes）與 JSCore 可用。
+- 新增 `IncrementalSyntaxHighlighter`（`NSTextStorageDelegate`）：示範「只改 attributes、不改 characters」的增量高亮路徑，避免 didProcessEditing 類型的回歸。

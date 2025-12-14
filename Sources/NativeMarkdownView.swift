@@ -4,6 +4,7 @@
 import AppKit
 import Foundation
 import Markdown
+import Highlightr
 
 enum NativeMarkdownPipeline: String {
     case regex = "regex"
@@ -742,11 +743,16 @@ private final class NativeMarkdownParser {
             .foregroundColor: theme.textColor,
             .paragraphStyle: paragraphStyle
         ]
-        
-        let out = NSMutableAttributedString(string: code + "\n", attributes: baseAttrs)
-        
-        // 套用簡易語法高亮（regex）
-        NativeCodeHighlighter.applyHighlight(to: out, languageHint: language, theme: theme)
+
+        // 優先使用 Highlightr（highlight.js via JavaScriptCore）；失敗再 fallback 到 regex。
+        let out: NSMutableAttributedString
+        if let highlighted = NativeHighlightr.highlight(code: code, languageHint: language, theme: theme) {
+            out = NSMutableAttributedString(attributedString: highlighted)
+            out.append(NSAttributedString(string: "\n", attributes: baseAttrs))
+        } else {
+            out = NSMutableAttributedString(string: code + "\n", attributes: baseAttrs)
+            NativeCodeHighlighter.applyRegexHighlight(to: out, languageHint: language, theme: theme)
+        }
         
         // 標示成 code（避免後續 inline 規則覆蓋）
         out.addAttribute(Self.isCodeAttribute, value: true, range: NSRange(location: 0, length: out.length))
@@ -1158,11 +1164,38 @@ private final class NativeMarkdownParser {
     }
 }
 
+// MARK: - Code Highlight (Highlightr)
+
+private enum NativeHighlightr {
+    // Highlightr init 可能失敗（資源/JSContext），因此用 optional
+    private static let shared: Highlightr? = Highlightr()
+
+    private static func isDarkMode() -> Bool {
+        guard let app = NSApp else { return false }
+        return app.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+
+    static func highlight(code: String, languageHint: String, theme: NativeMarkdownTheme) -> NSAttributedString? {
+        guard let hl = shared else { return nil }
+
+        // 設定字型（含 bold/italic 變體）
+        hl.theme.setCodeFont(theme.monoFont)
+
+        // 依外觀切 theme（若指定失敗就沿用預設 pojoaque）
+        let desired = isDarkMode() ? "paraiso-dark" : "paraiso-light"
+        _ = hl.setTheme(to: desired)
+
+        let lang = languageHint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let langOrNil: String? = lang.isEmpty ? nil : lang
+        return hl.highlight(code, as: langOrNil, fastRender: true)
+    }
+}
+
 // MARK: - Code Highlight (regex-based)
 
 private enum NativeCodeHighlighter {
     
-    static func applyHighlight(to attributed: NSMutableAttributedString, languageHint: String, theme: NativeMarkdownTheme) {
+    static func applyRegexHighlight(to attributed: NSMutableAttributedString, languageHint: String, theme: NativeMarkdownTheme) {
         let language = languageHint.lowercased()
         
         // 先套用通用規則（strings / numbers / comments）

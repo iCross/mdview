@@ -1,6 +1,15 @@
 {
   "pins" : [
     {
+      "identity" : "highlightr",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/raspu/Highlightr.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "ae9aa92a70e627298e31172124217c000e30fea3"
+      }
+    },
+    {
       "identity" : "swift-cmark",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swiftlang/swift-cmark.git",

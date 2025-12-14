@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Markdown
+import Highlightr
 
 /// AST-based Markdown → NSAttributedString renderer (swift-markdown).
 ///
@@ -46,6 +47,7 @@ struct ASTMarkdownRenderer {
             case ordered(depth: Int, start: Int)
         }
         private var listStack: [ListContext] = []
+        private static let highlightr: Highlightr? = Highlightr()
 
         init(theme: NativeMarkdownTheme) {
             self.theme = theme
@@ -192,12 +194,26 @@ struct ASTMarkdownRenderer {
             p.lineSpacing = theme.baseParagraphStyle.lineSpacing
             p.paragraphSpacing = 10
 
-            let attrs: [NSAttributedString.Key: Any] = [
+            let baseAttrs: [NSAttributedString.Key: Any] = [
                 .font: theme.monoFont,
                 .foregroundColor: theme.textColor,
                 .paragraphStyle: p
             ]
-            out.append(NSAttributedString(string: codeBlock.code + "\n", attributes: attrs))
+            if let hl = Self.highlightr {
+                hl.theme.setCodeFont(theme.monoFont)
+                _ = hl.setTheme(to: (NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua) ? "paraiso-dark" : "paraiso-light")
+                let highlighted = hl.highlight(codeBlock.code, as: nil, fastRender: true)
+                if let highlighted {
+                    let m = NSMutableAttributedString(attributedString: highlighted)
+                    m.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: m.length))
+                    out.append(m)
+                    out.append(NSAttributedString(string: "\n", attributes: baseAttrs))
+                    out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
+                    return
+                }
+            }
+
+            out.append(NSAttributedString(string: codeBlock.code + "\n", attributes: baseAttrs))
             out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
         }
 

@@ -317,6 +317,13 @@ func testCompilation(_ runner: TestRunner) {
         let result = runProcess("\(basePath)/mdviewer", ["--native-skeleton-check"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SKELETON_OK")
     }
+
+    // Highlightr：驗證 SPM resource bundle + JSCore 可正常使用
+    runner.run("mdviewer --highlightr-check 會回傳 HIGHLIGHTR_OK") {
+        let basePath = FileManager.default.currentDirectoryPath
+        let result = runProcess("\(basePath)/mdviewer", ["--highlightr-check"], timeoutSeconds: 4.0)
+        return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("HIGHLIGHTR_OK")
+    }
 }
 
 // MARK: - FileHandler 單元測試
