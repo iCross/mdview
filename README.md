@@ -1,261 +1,51 @@
-# Markdown Viewer
+# markdown_swift（`mdviewer`）— LLM 專案入口
 
-一個使用 Swift + AppKit 開發的 macOS 原生 Markdown 檢視器，支援 **WebKit（HTML/JS）** 與 **Native（NSTextView）** 兩種渲染器，可在「外觀/相容性」與「輕量/原生感」之間切換。
+## 目標
+macOS Markdown Reader（AppKit）。支援兩種渲染器：
+- **WebKit（deprecated）**：`WKWebView`（HTML/JS；marked.js / highlight.js 走 CDN）。仍可用但不建議，後續預計移除；建議改用 `--native`。
+- **Native**：`NSTextView`（TextKit；支援 `regex` 或 `swift-markdown` AST 管線；code block 主要用 Highlightr）
 
-## 目標與渲染路線（WebKit vs 原生 NSTextView）
-
-本專案**目前預設**採用 `WKWebView`（HTML/JS）渲染 Markdown，優點是「快速做出接近 GitHub 的外觀與 code block 高亮」。
-
-如果你的核心目標是 **更小 RAM 佔用、更快啟動、更少依賴**，可以切換成 **Native renderer**：Swift + AppKit + `NSTextView` / `NSAttributedString`（不使用 WebView）。
-
-- **WebKit（目前）**：效果好、功能完整、開發速度快；但 WebKit/JS 會讓記憶體與啟動成本較高。
-- **原生 NSTextView（已實作）**：依賴較少、常駐 RAM/啟動成本通常更好，並可做出更「macOS 原生感」的閱讀排版；但要完全對齊 GitHub/GFM 相容性，工程量會比 WebKit 路線高。
-
-## 功能特點
-
-- 📝 **Markdown 渲染** - 使用 marked.js 解析 GitHub Flavored Markdown
-- 🎨 **語法高亮** - 使用 highlight.js 提供程式碼高亮
-- 🌙 **深色模式** - 自動跟隨系統深色/淺色模式切換
-- 📂 **檔案拖放** - 支援拖放 .md/.markdown 檔案
-- 🔄 **自動重載** - 檔案變更時自動重新載入
-- ⌨️ **快捷鍵支援** - 完整的鍵盤快捷鍵
-- 🪶 **Native renderer（NSTextView）** - 原生 code block/quote/table/image（偏 Notes 風格）
-
-## 渲染器切換
-
-- **GUI 選單**：`檢視(View) → 使用 WebKit 渲染器 / 使用原生渲染器（NSTextView）`
-- **命令列參數**：
-  - `--webkit`（預設）
-  - `--native`
-  - `--renderer=webkit|native`
-
-## 系統需求
-
-- macOS 10.15 (Catalina) 或更高版本
-- Swift 5.0 或更高版本
-
-## 編譯
-
-### Debug 版本
-
+## 最常用指令
 ```bash
 make debug
-# 或
-make
-```
-
-### Release 版本
-
-```bash
-make release
-```
-
-### 清除編譯產物
-
-```bash
-make clean
-```
-
-## 測試
-
-```bash
-# 全部測試（包含編譯/CLI/基本行為）
 make test
-
-# GUI smoke test：驗證可從 CLI 啟動並建立視窗後自動退出（避免卡住）
 make smoke
-```
-
-## 使用方式
-
-### 命令列
-
-```bash
-# 開啟指定檔案
-./mdviewer path/to/file.md
-
-# 開啟應用程式（無檔案）
-./mdviewer
-
-# 顯示說明
+./mdviewer test.md
 ./mdviewer --help
-
-# 以 Native renderer 開啟
-./mdviewer --native test.md
 ```
 
-### 圖形介面
+## CLI（以程式碼為準：`Sources/main.swift`）
+- **Renderer**：`--webkit`（deprecated；目前仍可用且可能仍為預設）、`--native`、`--renderer=webkit|native`
+- **Native pipeline**：`--native-pipeline=regex|ast`、`--native-ast`
+- **CI/除錯（不啟動 GUI）**：
+  - `--native-dump <file.md>`
+  - `--native-render-text <file.md>`
+  - `--native-skeleton-check`
+  - `--highlightr-check`
+- **GUI smoke**：`--smoke-test`（建立視窗後自動退出；用來避免 WebKit 初始化造成「視窗不出現」的誤判）
+- **GUI screenshot（給 LLM / CI 做視覺驗證）**：
+  - `--screenshot <out.png>`（啟動 GUI、渲染後輸出 PNG，然後自動退出）
+  - `--screenshot-delay <sec>`（等待秒數；預設 1.0，WebKit 建議 >= 1.0）
 
-1. 執行應用程式
-2. 拖放 Markdown 檔案到視窗
-3. 或使用選單 `File → Open` 開啟檔案
-
-## 快捷鍵
-
-| 快捷鍵 | 功能 |
-|--------|------|
-| ⌘O | 開啟檔案 |
-| ⌘R | 重新載入 |
-| ⌘+ | 放大 |
-| ⌘- | 縮小 |
-| ⌘0 | 實際大小 |
-| ⌘W | 關閉視窗 |
-| ⌘Q | 結束程式 |
-| ⌃⌘F | 全螢幕 |
-
-## 專案結構
-
-```
-markdown_swift/
-├── Sources/
-│   ├── main.swift          # 應用程式入口點
-│   ├── AppDelegate.swift   # 應用程式代理
-│   ├── MarkdownView.swift  # WebKit 視圖元件
-│   ├── NativeMarkdownView.swift # Native 視圖元件（NSTextView）
-│   ├── FileHandler.swift   # 檔案處理元件
-│   └── MenuBuilder.swift   # 選單建構元件
-├── Makefile                # 編譯腳本
-├── test.md                 # 測試用 Markdown 檔案
-├── Tests/
-│   └── test_runner.swift    # 測試執行器
-└── README.md               # 本說明文件
-```
-
-## 技術架構
-
-- **GUI 框架**: AppKit (NSApplication, NSWindow, NSView)
-- **渲染引擎（目前預設）**: WebKit (WKWebView)
-  - **Markdown 解析**: marked.js (CDN)
-  - **語法高亮**: highlight.js (CDN)
-- **渲染引擎（原生 / 已實作）**: AppKit `NSTextView` + `NSAttributedString`（不使用 WebView）
-  - **Markdown 解析**: 目前採「簡化 parser + regex」
-  - **表格**: `NSTextTable` / `NSTextTableBlock`
-  - **圖片**: `NSTextAttachment`（支援相對/絕對路徑）
-  - **區塊樣式**: `NSTextBlock`（code block / quote）
-  - **語法高亮**: code block 優先使用 Highlightr（highlight.js via JavaScriptCore）；另提供 `NSTextStorageDelegate` 的增量高亮路徑（供 Editor 化時使用）
-- **檔案監控**: DispatchSourceFileSystemObject
-
-## Native renderer（NSTextView）現況與後續方向
-
-Native renderer 已可使用，目標是「更輕量、更像 macOS Notes 的一致排版」。若想進一步提升相容性與品質，建議：
-
-- **Markdown 解析升級**：改成 AST（例如整合 `cmark-gfm` 或採用 `swift-markdown`），避免 regex 天花板
-- **語法高亮升級**：改用 `NSTextStorageDelegate` 做增量高亮（更接近 Editor/Notes 的質感）
-- **排版一致性**：以 `textContainerInset` + `NSParagraphStyle` 統一 typography（Notes 風格）
-
-若完全移除 WebKit：更新 `Makefile` 的 `FRAMEWORKS` 並移除 `Sources/MarkdownView.swift` 相關依賴即可。
-
-## 下一步計劃（建議新對話起手式）
-
-本專案目前已具備 Native renderer 的基礎，但要做到「更像 macOS Notes 的一致排版 + 更穩定的 Markdown/Highlight」，建議用 `gh clone` 直接抓模板 repo 來對照骨架與最佳實踐（尤其是 `NSTextView`/`NSScrollView` 的 sizing 與增量高亮）。
-
-### 先決定一件事：Reader vs Editor
-- **純 Reader**：`isEditable = false`、`isSelectable = true`，最接近 Notes 的閱讀體驗，工程量也較可控。
-- **Reader + Editor**：仍可做 Notes 感，但要處理貼上樣式、游標、選取區、高亮更新等更多坑。
-
-### 已決定的管線（短期 / 中期）
-
-- **Markdown 管線**：
-  - **短期**：維持本 repo 的 `NativeMarkdownParser`（regex + 手刻 block parser），因為已支援 table/image/task list 等需求
-  - **中期**：改走 **AST（`swift-markdown`）** 作為基底（可維護性優先），並自行補齊/混合處理 **GFM 的 table/task/image**
-
-- **語法高亮管線**：
-  - **短期**：維持 regex 高亮（已可用）
-  - **中期**：導入 **Highlightr**
-    - 純 Reader：先用於 **code block render-time** 高亮（輸出 `NSAttributedString`）
-    - 若未來做 Editor：改用 `CodeAttributedString`（`NSTextStorage` 子類）走 **incremental highlight**（只更新 attributes）
-
-### 用 `gh` 直接 clone 參考 repo
-
+範例：
 ```bash
-gh repo clone chockenberry/MarkdownAttributedString
-gh repo clone madebywindmill/MarkdownToAttributedString
-gh repo clone raspu/Highlightr
-gh repo clone krzyzanowskim/STTextView
+# 產生一張 Native renderer 的截圖（不需要螢幕錄製權限）
+./mdviewer --native --screenshot /tmp/mdviewer.png --screenshot-delay 0.2 test.md
 ```
 
-### 參考 repo 筆記（對照重點）
+## 程式碼入口（找功能先看這些）
+- `Sources/main.swift`：CLI flags / debug-only 路徑 / App 啟動
+- `Sources/AppDelegate.swift`：視窗、渲染器切換、載檔、檔案監控、拖放
+- `Sources/MarkdownView.swift`：WebKit renderer
+- `Sources/NativeMarkdownView.swift`：Native renderer（width sync / reflow 關鍵也在這）
+- `Sources/ASTMarkdownRenderer.swift`：AST 管線（`swift-markdown`）
+- `Sources/FileHandler.swift`：讀檔 + 檔案變更監控
+- `Sources/MenuBuilder.swift`：選單/快捷鍵
+- `Tests/test_runner.swift`：測試入口
 
-這些 repo 只用來「看骨架/看管線」，本專案已在 `.gitignore` 排除它們的目錄（`Highlightr/`、`MarkdownToAttributedString/`、`MarkdownAttributedString/`、`STTextView/`），避免誤提交。
+## 不變式（回歸最常發生在這）
+- **Native 不能每字換行**：`NSTextContainer` 寬度要跟著 `NSScrollView` 可視寬同步，並在幾何變更時強制 reflow。
+- **所有 build/test/子行程必須有 timeout**：避免卡死（Makefile 已包 timeout；測試也應同樣保守）。
 
-- **Highlightr**：提供兩條路徑
-  - `Highlightr.highlight(_:as:)`：把 code 字串轉成 `NSAttributedString`（語法高亮）
-  - `CodeAttributedString`（`NSTextStorage` 子類）：適合做 **incremental highlight**（只更新 attributes，不動 characters）
-  - 技術上依賴 `JavaScriptCore` 跑 `highlight.js`，速度在「code block / editor」場景通常可接受
-
-- **MarkdownToAttributedString**：用 `swift-markdown` 的 `Document(parsing:)` 建 AST，再用 visitor 轉成 `NSAttributedString`
-  - 優點：語意正確、可維護性高，適合作為「AST 管線」基底
-  - 注意：該 repo 目前 **不支援 tables / task lists / images**（本專案若採用，需要自行補齊或混合策略）
-
-- **MarkdownAttributedString**：Objective-C category，把 markdown span（link/emphasis/code span）轉成 attributed string
-  - 優點：概念上很輕、可離線、好做 localization
-  - 侷限：刻意不做 headers/lists 等 block elements；更像是「span rich text」工具
-
-- **STTextView**：TextKit 2 的 `NSTextView`/`UITextView` replacement（偏 editor）
-  - 可學：`typingAttributes[.paragraphStyle]`、lineHeight、wrap/no-wrap 等實務坑與 workaround
-  - 授權：GPL/commercial，**不要複製其程式碼進本 repo**（僅用來觀察 sizing 行為/坑）
-
-### 重要備註（授權/整合策略）
-
-- **STTextView**：此專案授權為 GPL/commercial（不適合直接搬碼進本 repo）。本專案僅用來「觀察/驗證」`NSTextView + NSScrollView` 的 sizing 行為與常見坑，**不要複製其程式碼**。
-- **Highlightr / MarkdownToAttributedString / MarkdownAttributedString**：MIT 授權，可作為未來整合的候選（若要導入，建議改走 SPM，才能正確處理依賴與 resources）。
-- **本 repo 的外部參考目錄**：`Highlightr/`、`MarkdownToAttributedString/`、`MarkdownAttributedString/`、`STTextView/` 已加入 `.gitignore`，避免誤提交。
-
-### 建議的整合順序（避免走冤枉路）
-- **先把骨架打通**：`NSTextView` 放進 `NSScrollView`，寬度跟著視窗變，且永遠不會「每字換行」。
-- **再做 typography**：用 `textContainerInset` + `NSParagraphStyle` 定義 Notes 風格（行高策略、段落距、列表縮排）。
-- **再換 Markdown 管線**：優先採用 AST/成熟套件輸出 `NSAttributedString`，避免 regex 天花板。
-- **最後做 incremental highlight**：優先用 `NSTextStorage` 子類（Highlightr 類型）或只在 `didProcessEditing` 改 attributes 的做法。
-
-### GitHub 搜尋關鍵字（可複製貼上）
-- `language:Swift NSTextView NSScrollView widthTracksTextView`
-- `language:Swift Markdown NSAttributedString NSTextView`
-- `language:Swift NSTextStorage syntax highlighting macOS`
-- GitHub topic：`nstextview`（Swift 篩選）
-
-## 支援的 Markdown 語法
-
-- 標題 (h1-h6)
-- 粗體、斜體、刪除線
-- 有序/無序列表
-- 待辦清單
-- 程式碼區塊（含語法高亮）
-- 引用區塊
-- 表格
-- 連結、圖片
-- 水平分隔線
-
-## 授權
-
-MIT License
-
-## 開發筆記
-
-此專案預設使用 **Swift Package Manager** 編譯（`Package.swift` + `swift build`），因此可以乾淨地引入外部依賴（例如 `swift-markdown`、後續的 Highlightr）。
-
-若你只想快速理解「最小化 swiftc 編譯」概念，下面仍保留舊的參考指令（但不再是本 repo 預設建置路徑）。
-
-```bash
-swiftc -o mdviewer Sources/*.swift -framework AppKit -framework WebKit
-```
-
-## CLI Debug/Testing（避免卡住）
-
-以下指令會 **快速退出**（不啟動 GUI），適合 CI/除錯：
-
-```bash
-# 解析資訊（table/image marker）
-./mdviewer --native-dump test.md
-
-# Native 渲染後純文字（用於驗證 fenced code block 不會吃掉後續內容）
-./mdviewer --native-render-text test.md
-
-# Native AST 管線（遇到 table/task/image 會 fallback）
-./mdviewer --native-pipeline=ast --native-render-text test.md
-
-# Native 寬度骨架檢查（不啟動 GUI）
-./mdviewer --native-skeleton-check
-
-# Highlightr 依賴檢查（不啟動 GUI）
-./mdviewer --highlightr-check
-```
+## 其他文件（都以「給 LLM 用」為前提）
+- `todo.md`：僅保留仍未完成的 TODO 與關鍵決策/不變式

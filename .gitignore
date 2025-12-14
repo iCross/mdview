@@ -6,6 +6,9 @@ mdviewer.dSYM/
 .build/
 .swiftpm/
 
+# Local scratch / screenshots (for agent verification)
+.tmp/
+
 # Reference repos (cloned locally for comparison; do not commit)
 Highlightr/
 MarkdownAttributedString/

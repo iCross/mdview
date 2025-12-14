@@ -21,6 +21,10 @@ func printHelp() {
                               指定 Native Markdown 管線（預設 regex；ast 會在遇到 table/task/image 時 fallback）
       --native-ast             等同 --native-pipeline=ast
       --smoke-test             GUI smoke test（建立視窗後自動退出）
+      --screenshot <out.png>   啟動 GUI、渲染後截圖輸出 PNG，然後自動退出
+      --screenshot=<out.png>   同上（等號形式）
+      --screenshot-delay <sec> 等待秒數（預設 1.0；WebKit 建議 >= 1.0）
+      --screenshot-delay=<sec> 同上（等號形式）
 
     Debug/Testing:
       --native-dump <file.md>  不啟動 GUI，輸出 Native 解析結果（供測試用）

@@ -2,6 +2,7 @@
 // macOS Markdown Viewer - WebKit 視圖元件
 
 import AppKit
+import Foundation
 import WebKit
 
 // MARK: - Shared Protocols (WebKit / Native)
@@ -115,9 +116,24 @@ class MarkdownView: NSView, MarkdownRenderable {
                     line-height: 1.6;
                     color: var(--text-color);
                     background-color: var(--bg-color);
-                    max-width: 900px;
-                    margin: 0 auto;
+                    margin: 0;
+                    padding: 0;
+                }
+                
+                #content {
                     padding: 20px 45px;
+                }
+                
+                /* 一般文章維持舒服閱讀寬度；table 例外走全寬 */
+                #content > * {
+                    max-width: 900px;
+                    margin-left: auto;
+                    margin-right: auto;
+                }
+                
+                #content > .table-wrapper {
+                    max-width: none;
+                    width: 100%;
                 }
                 
                 h1, h2, h3, h4, h5, h6 {
@@ -178,6 +194,15 @@ class MarkdownView: NSView, MarkdownRenderable {
                     border-left: 0.25em solid var(--border-color);
                 }
                 
+                /* 避免引用區塊內的段落預設 margin 造成「中間空一大段」 */
+                blockquote p {
+                    margin: 0;
+                }
+                
+                blockquote p + p {
+                    margin-top: 0.5em;
+                }
+                
                 ul, ol {
                     margin-top: 0;
                     margin-bottom: 16px;
@@ -188,23 +213,32 @@ class MarkdownView: NSView, MarkdownRenderable {
                     margin-top: 0.25em;
                 }
                 
-                table {
-                    border-collapse: collapse;
-                    width: 100%;
+                .table-wrapper {
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
                     margin-bottom: 16px;
                 }
                 
-                th, td {
-                    border: 1px solid var(--border-color);
-                    padding: 6px 13px;
+                .table-wrapper table {
+                    border-collapse: collapse;
+                    table-layout: auto;
+                    /* 欄寬盡量依內容決定 */
+                    width: max-content;
+                    margin-bottom: 0;
                 }
                 
-                th {
+                .table-wrapper th, .table-wrapper td {
+                    border: 1px solid var(--border-color);
+                    padding: 6px 13px;
+                    white-space: nowrap;
+                }
+                
+                .table-wrapper th {
                     font-weight: 600;
                     background-color: var(--code-bg);
                 }
                 
-                tr:nth-child(2n) {
+                .table-wrapper tr:nth-child(2n) {
                     background-color: var(--code-bg);
                 }
                 
@@ -283,7 +317,21 @@ class MarkdownView: NSView, MarkdownRenderable {
                 
                 // 渲染 Markdown
                 function renderMarkdown(markdown) {
-                    document.getElementById('content').innerHTML = marked.parse(markdown);
+                    const contentEl = document.getElementById('content');
+                    contentEl.innerHTML = marked.parse(markdown);
+                    
+                    // 將 table 包一層可水平捲動的 wrapper（避免超寬撐爆版面）
+                    contentEl.querySelectorAll('table').forEach((table) => {
+                        const parent = table.parentElement;
+                        if (parent && parent.classList.contains('table-wrapper')) return;
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'table-wrapper';
+                        if (table.parentNode) {
+                            table.parentNode.insertBefore(wrapper, table);
+                            wrapper.appendChild(table);
+                        }
+                    });
+                    
                     // 重新套用語法高亮
                     document.querySelectorAll('pre code').forEach((block) => {
                         hljs.highlightElement(block);
@@ -405,5 +453,44 @@ class MarkdownView: NSView, MarkdownRenderable {
             return true
         }
         return false
+    }
+
+    // MARK: - Snapshot (for automated GUI verification)
+
+    /// 使用 `WKWebView.takeSnapshot` 取得穩定的渲染結果（比 cacheDisplay 更可靠）。
+    /// 用於 `--screenshot` 這類「啟動 GUI → 截圖 → 自動退出」的測試模式。
+    func captureSnapshotPNG(to url: URL, completion: @escaping (Bool) -> Void) {
+        let dir = url.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            completion(false)
+            return
+        }
+
+        let config = WKSnapshotConfiguration()
+        config.rect = webView.bounds
+
+        webView.takeSnapshot(with: config) { image, error in
+            if let error = error {
+                print("Snapshot 失敗: \(error)")
+            }
+            guard let image else {
+                completion(false)
+                return
+            }
+            guard let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let data = rep.representation(using: .png, properties: [:]) else {
+                completion(false)
+                return
+            }
+            do {
+                try data.write(to: url, options: .atomic)
+                completion(true)
+            } catch {
+                completion(false)
+            }
+        }
     }
 }
