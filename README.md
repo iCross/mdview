@@ -145,6 +145,41 @@ Native renderer 已可使用，目標是「更輕量、更像 macOS Notes 的一
 
 若完全移除 WebKit：更新 `Makefile` 的 `FRAMEWORKS` 並移除 `Sources/MarkdownView.swift` 相關依賴即可。
 
+## 下一步計劃（建議新對話起手式）
+
+本專案目前已具備 Native renderer 的基礎，但要做到「更像 macOS Notes 的一致排版 + 更穩定的 Markdown/Highlight」，建議用 `gh clone` 直接抓模板 repo 來對照骨架與最佳實踐（尤其是 `NSTextView`/`NSScrollView` 的 sizing 與增量高亮）。
+
+### 先決定一件事：Reader vs Editor
+- **純 Reader**：`isEditable = false`、`isSelectable = true`，最接近 Notes 的閱讀體驗，工程量也較可控。
+- **Reader + Editor**：仍可做 Notes 感，但要處理貼上樣式、游標、選取區、高亮更新等更多坑。
+
+### 用 `gh` 直接 clone 參考 repo
+
+```bash
+gh repo clone chockenberry/MarkdownAttributedString
+gh repo clone madebywindmill/MarkdownToAttributedString
+gh repo clone raspu/Highlightr
+gh repo clone krzyzanowskim/STTextView
+```
+
+### 重要備註（授權/整合策略）
+
+- **STTextView**：此專案授權為 GPL/commercial（不適合直接搬碼進本 repo）。本專案僅用來「觀察/驗證」`NSTextView + NSScrollView` 的 sizing 行為與常見坑，**不要複製其程式碼**。
+- **Highlightr / MarkdownToAttributedString / MarkdownAttributedString**：MIT 授權，可作為未來整合的候選（若要導入，建議改走 SPM，才能正確處理依賴與 resources）。
+- **本 repo 的外部參考目錄**：`Highlightr/`、`MarkdownToAttributedString/`、`MarkdownAttributedString/`、`STTextView/` 已加入 `.gitignore`，避免誤提交。
+
+### 建議的整合順序（避免走冤枉路）
+- **先把骨架打通**：`NSTextView` 放進 `NSScrollView`，寬度跟著視窗變，且永遠不會「每字換行」。
+- **再做 typography**：用 `textContainerInset` + `NSParagraphStyle` 定義 Notes 風格（行高策略、段落距、列表縮排）。
+- **再換 Markdown 管線**：優先採用 AST/成熟套件輸出 `NSAttributedString`，避免 regex 天花板。
+- **最後做 incremental highlight**：優先用 `NSTextStorage` 子類（Highlightr 類型）或只在 `didProcessEditing` 改 attributes 的做法。
+
+### GitHub 搜尋關鍵字（可複製貼上）
+- `language:Swift NSTextView NSScrollView widthTracksTextView`
+- `language:Swift Markdown NSAttributedString NSTextView`
+- `language:Swift NSTextStorage syntax highlighting macOS`
+- GitHub topic：`nstextview`（Swift 篩選）
+
 ## 支援的 Markdown 語法
 
 - 標題 (h1-h6)

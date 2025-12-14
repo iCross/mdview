@@ -46,6 +46,36 @@
 - [x] 測試補齊：子行程統一 timeout/kill（避免測試卡死）
 - [ ] 若完全移除 WebKit：更新 Makefile 的 FRAMEWORKS 與 Sources 清單（本次仍保留 WebKit 路線）
 
+## 下一步計劃（準備重開新對話 / 以 `gh clone` 參考模板）
+
+### 方向決策
+- [x] 決定產品型態：**純 Reader（不可編輯）** vs **Reader + Editor（可編輯但強制一致 typography + 高亮）**（決定：純 Reader）
+- [ ] 決定 Markdown 管線：維持自寫 parser / 改用 AST（優先）/ 第三方套件
+- [ ] 決定語法高亮管線：維持 regex / `NSTextStorageDelegate` / `NSTextStorage` 子類（優先 Highlightr 類型）
+
+### 先抓下來看的 repo（用 `gh`）
+> 目標：直接複製「NSTextView + NSScrollView + width 跟著視窗變」的穩定骨架，再疊 Markdown → NSAttributedString 與 incremental highlight。
+
+```bash
+gh repo clone chockenberry/MarkdownAttributedString
+gh repo clone madebywindmill/MarkdownToAttributedString
+gh repo clone raspu/Highlightr
+gh repo clone krzyzanowskim/STTextView
+```
+
+### 優先驗證項目（比「功能加更多」更重要）
+- [ ] Scroll/寬度骨架：`NSTextView` 放進 `NSScrollView`，視窗縮放時**不會變成每字換行**、不會出現水平捲動
+- [ ] Notes 風格 typography：`textContainerInset` + `NSParagraphStyle`（lineHeight/spacing 策略）一致套用（含貼上內容）
+- [ ] Markdown→AttributedString：表格/圖片/連結/引用/code block 的 block-level 與 inline 樣式一致
+- [ ] incremental highlight：只改 attributes、不改 characters；避免 `didProcessEditing` crash 類型問題
+- [ ] timeout 文化：所有 build/test/子行程都要有 timeout（避免卡住）
+
+### GitHub 搜尋捷徑（新對話可直接貼這些關鍵字）
+- [ ] `language:Swift NSTextView NSScrollView widthTracksTextView`
+- [ ] `language:Swift Markdown NSAttributedString NSTextView`
+- [ ] `language:Swift NSTextStorage syntax highlighting macOS`
+- [ ] GitHub topic：`nstextview`（Swift 篩選）→ 以 stars / recently updated 挑模板
+
 ## 已完成功能
 - 基本 Markdown 渲染
 - GitHub Flavored Markdown 支援

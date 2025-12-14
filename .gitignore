@@ -4,3 +4,9 @@
 mdviewer
 mdviewer.dSYM/
 
+# Reference repos (cloned locally for comparison; do not commit)
+Highlightr/
+MarkdownAttributedString/
+MarkdownToAttributedString/
+STTextView/
+
