@@ -41,6 +41,7 @@ struct ASTMarkdownRenderer {
         private let theme: NativeMarkdownTheme
         private var out = NSMutableAttributedString()
         private var currentAttributes: [NSAttributedString.Key: Any]
+        private var blockQuoteDepth: Int = 0
 
         private enum ListContext {
             case unordered(depth: Int)
@@ -86,7 +87,13 @@ struct ASTMarkdownRenderer {
         }
 
         mutating func visitSoftBreak(_ softBreak: SoftBreak) {
-            out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
+            // soft break 在 blockquote 內若用 "\n" 容易被視為段落分隔而引發 paragraphSpacing；
+            // 這裡在 quote context 改用 U+2028（line separator）維持同段落換行。
+            if blockQuoteDepth > 0 {
+                out.append(NSAttributedString(string: "\u{2028}", attributes: currentAttributes))
+            } else {
+                out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
+            }
         }
 
         mutating func visitLineBreak(_ lineBreak: LineBreak) {
@@ -174,7 +181,9 @@ struct ASTMarkdownRenderer {
             let prev = currentAttributes
             currentAttributes[.paragraphStyle] = p
             currentAttributes[.foregroundColor] = theme.secondaryTextColor
+            blockQuoteDepth += 1
             visitChildren(of: blockQuote)
+            blockQuoteDepth -= 1
             out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
             currentAttributes = prev
         }

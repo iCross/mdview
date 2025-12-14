@@ -33,15 +33,32 @@ make smoke
 ## GUI 截圖（給 LLM / CI）
 - **用途**：把 GUI 渲染結果轉成 PNG，方便在 CI/agent 端檢查 table / quote / code block 等視覺結果。
 - **輸出位置**：建議用 repo 內的 `.tmp/`（已在 `.gitignore` 忽略）；輸出資料夾會自動建立。
+- **截圖範圍（重要）**：
+  - 預設只截「可視範圍」（viewport）。若 table/quote 不在首屏，PNG 可能看不到問題區塊。
+  - 可用 `--screenshot-scroll-to` 先捲到指定文字，再截圖（最推薦、最穩定）。
+  - 或用 `--screenshot-full` 嘗試截整頁；但為避免超大 PNG/記憶體爆掉，會有高度上限（超過會失敗，請改用 scroll-to）。
 - **成功/失敗訊號**：
   - 成功：stdout 會印 `SCREENSHOT_OK <path>`，exit code = 0
   - 失敗：stdout 會印 `SCREENSHOT_FAIL <path>`，exit code = 1
   - 超時：stdout 會印 `SCREENSHOT_TIMEOUT <path>`，exit code = 2
+  - scroll-to 找不到：stdout 會印 `SCREENSHOT_SCROLL_TO_NOT_FOUND <text> <path>`，exit code = 1
 
 範例（Native，建議）：
 ```bash
 ./mdviewer --no-activate --native --screenshot .tmp/mdviewer-native.png --screenshot-delay 0.2 test.md
 open .tmp/mdviewer-native.png
+```
+
+範例（捲到指定區塊再截圖；推薦用於 table/quote 視覺回歸）：
+```bash
+./mdviewer --no-activate --native --screenshot .tmp/mdviewer-table.png --screenshot-delay 0.2 --screenshot-scroll-to 表格範例 test.md
+open .tmp/mdviewer-table.png
+```
+
+範例（截整頁；可能因高度上限而失敗，建議優先用 scroll-to）：
+```bash
+./mdviewer --no-activate --native --screenshot .tmp/mdviewer-full.png --screenshot-delay 0.2 --screenshot-full test.md
+open .tmp/mdviewer-full.png
 ```
 
 範例（WebKit，deprecated；通常需要更久的 delay）：

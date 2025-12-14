@@ -24,6 +24,11 @@ func printHelp() {
       --smoke-test             GUI smoke test（建立視窗後自動退出）
       --screenshot <out.png>   啟動 GUI、渲染後截圖輸出 PNG，然後自動退出
       --screenshot=<out.png>   同上（等號形式）
+      --screenshot-full        截「整份文件內容」（可能很大；超出上限會失敗，建議改用 scroll-to）
+      --screenshot-scroll-to <text>
+                              截圖前先捲到第一個包含 <text> 的位置（用於讓 table/quote 一定在截圖範圍內）
+      --screenshot-scroll-y <number>
+                              截圖前捲到指定 y offset（點數；0 代表頂端）
       --screenshot-delay <sec> 等待秒數（預設 1.0；WebKit 建議 >= 1.0）
       --screenshot-delay=<sec> 同上（等號形式）
 

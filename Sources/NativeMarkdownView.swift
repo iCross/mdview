@@ -186,11 +186,18 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         if pipeline == .ast, ASTMarkdownRenderer.canRender(markdown: content) {
             attributed = ASTMarkdownRenderer(theme: theme).render(markdown: content)
         } else {
-            attributed = NativeMarkdownParser(theme: theme, baseURL: baseURL).render(markdown: content)
+            let maxTableWidth = textView.textContainer?.containerSize.width
+            attributed = NativeMarkdownParser(theme: theme, baseURL: baseURL, maxTableWidth: maxTableWidth).render(markdown: content)
         }
         
         // 將結果塞入 textStorage
         textView.textStorage?.setAttributedString(attributed)
+
+        // 確保第一次渲染就以正確容器寬度 reflow（table/code block 常在這裡回歸）
+        syncTextContainerWidth()
+        if let container = textView.textContainer {
+            textView.layoutManager?.ensureLayout(for: container)
+        }
         
         // 將游標回到頂端
         textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
@@ -213,7 +220,8 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         - 或使用命令列：`./mdviewer path/to/file.md`
         """
         
-        let attributed = NativeMarkdownParser(theme: theme, baseURL: nil).render(markdown: welcome)
+        let maxTableWidth = textView.textContainer?.containerSize.width
+        let attributed = NativeMarkdownParser(theme: theme, baseURL: nil, maxTableWidth: maxTableWidth).render(markdown: welcome)
         textView.textStorage?.setAttributedString(attributed)
         textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
     }
@@ -320,9 +328,11 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         if pipeline == .ast, ASTMarkdownRenderer.canRender(markdown: markdown) {
             attributed = ASTMarkdownRenderer(theme: theme).render(markdown: markdown)
         } else {
-            attributed = NativeMarkdownParser(theme: theme, baseURL: nil).render(markdown: markdown)
+            attributed = NativeMarkdownParser(theme: theme, baseURL: nil, maxTableWidth: nil).render(markdown: markdown)
         }
-        return attributed.string
+        // 渲染器內部可能使用 U+2028（line separator）避免段落間距問題；
+        // debug/測試輸出時統一轉回 "\n" 以便做字串比對與在 terminal 觀察。
+        return attributed.string.replacingOccurrences(of: "\u{2028}", with: "\n")
     }
 
     /// 不啟動 GUI 的情況下驗證 NSTextView/NSScrollView 寬度骨架是否正常。
@@ -362,6 +372,60 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         } else {
             return "SKELETON_FAIL\n" + rows.joined(separator: "\n")
         }
+    }
+
+    // MARK: - Screenshot helpers (for AppDelegate automation)
+
+    /// 捲到第一個包含指定文字的位置（供 `--screenshot-scroll-to` 使用）。
+    /// - Returns: 是否找到並捲動成功
+    func scrollToFirstOccurrence(of text: String) -> Bool {
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return false }
+
+        let haystack = textView.string
+        guard let r = haystack.range(of: needle) else { return false }
+        let nsRange = NSRange(r, in: haystack)
+        textView.scrollRangeToVisible(nsRange)
+        return true
+    }
+
+    /// 捲到指定 y offset（點數；以「文件頂端」為 0）。
+    func scrollTo(y: CGFloat) {
+        let doc = scrollView.documentView ?? textView
+        let viewportHeight = scrollView.contentSize.height
+        let maxOffset = max(0, doc.bounds.height - viewportHeight)
+        let requested = max(0, y)
+
+        let targetY: CGFloat
+        if doc.isFlipped {
+            targetY = min(requested, maxOffset)
+        } else {
+            // 若座標系非 flipped，將「從頂端起算」轉成「從底端起算」
+            targetY = min(max(0, maxOffset - requested), maxOffset)
+        }
+
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: targetY))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    /// 取得「整份文件內容」用於 full-page screenshot 的 view（documentView）。
+    /// 目前回傳 NSTextView 本身（其 frame 高度會隨內容成長）。
+    func viewForFullScreenshot() -> NSView {
+        // 先確保 layout 完整，並把 textView 的高度拉到足夠容納內容（避免只截到首屏）。
+        if let container = textView.textContainer, let lm = textView.layoutManager {
+            lm.ensureLayout(for: container)
+            let used = lm.usedRect(for: container)
+            let inset = textView.textContainerInset
+            let desiredHeight = max(scrollView.contentSize.height, used.height + inset.height * 2)
+            if abs(textView.frame.height - desiredHeight) > 1.0 {
+                var f = textView.frame
+                f.size.height = desiredHeight
+                textView.frame = f
+            }
+        }
+        textView.layoutSubtreeIfNeeded()
+        textView.displayIfNeeded()
+        return textView
     }
 }
 
@@ -441,13 +505,17 @@ private final class NativeMarkdownParser {
     
     private let theme: NativeMarkdownTheme
     private let baseURL: URL?
+    /// Native table 的最大寬度（點數）。若 nil，使用保守預設值。
+    /// - 目的：小表格可依內容寬度顯示；遇到超寬內容時避免變成超大 table（改以換行/自動佈局處理）。
+    private let maxTableWidth: CGFloat?
     
     // 自訂屬性：用來避免在 code span 內再套用粗體/斜體等規則
     private static let isCodeAttribute = NSAttributedString.Key("NativeMarkdownIsCode")
     
-    init(theme: NativeMarkdownTheme, baseURL: URL?) {
+    init(theme: NativeMarkdownTheme, baseURL: URL?, maxTableWidth: CGFloat? = nil) {
         self.theme = theme
         self.baseURL = baseURL
+        self.maxTableWidth = maxTableWidth
     }
     
     func render(markdown: String) -> NSAttributedString {
@@ -538,12 +606,15 @@ private final class NativeMarkdownParser {
                 continue
             }
             
-            // 引用（>）
-            if let quoteText = parseBlockquote(line) {
+            // 引用（>）：以 block-level 解析連續 quote 行，避免「一行一個 block」導致 paragraphSpacing 疊加
+            if looksLikeBlockquoteStart(line) {
                 flushPendingParagraph()
-                output.append(renderBlockquote(quoteText))
-                output.append(NSAttributedString(string: "\n"))
-                i += 1
+                let (quoteText, consumed) = parseBlockquoteBlock(from: lines, startIndex: i)
+                if !quoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    output.append(renderBlockquote(quoteText))
+                    output.append(NSAttributedString(string: "\n"))
+                }
+                i += consumed
                 continue
             }
 
@@ -608,11 +679,50 @@ private final class NativeMarkdownParser {
         return (hashes, text)
     }
     
-    private func parseBlockquote(_ line: String) -> String? {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard trimmed.hasPrefix(">") else { return nil }
-        let rest = trimmed.dropFirst()
-        return String(rest).trimmingCharacters(in: .whitespaces)
+    private func looksLikeBlockquoteStart(_ line: String) -> Bool {
+        line.trimmingCharacters(in: .whitespaces).hasPrefix(">")
+    }
+
+    private func parseBlockquoteBlock(from lines: [String], startIndex: Int) -> (text: String, consumed: Int) {
+        var quoteLines: [String] = []
+        var i = startIndex
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix(">") else { break }
+
+            var rest = trimmed.dropFirst()
+            if rest.first == " " { rest = rest.dropFirst() }
+            let content = String(rest) // 可能是空字串（對應 `>` 空行）
+            quoteLines.append(content)
+            i += 1
+        }
+
+        // 正規化：同一段落內用 U+2028（line separator）串接，避免被當成新 paragraph；
+        // `>` 空行代表段落分隔，段落間用 \n\n。
+        var paragraphs: [String] = []
+        var current: [String] = []
+        var sawBlank = false
+        for l in quoteLines {
+            if l.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                sawBlank = true
+                if !current.isEmpty {
+                    paragraphs.append(current.joined(separator: "\u{2028}"))
+                    current.removeAll(keepingCapacity: true)
+                }
+                continue
+            }
+            if sawBlank {
+                sawBlank = false
+            }
+            current.append(l)
+        }
+        if !current.isEmpty {
+            paragraphs.append(current.joined(separator: "\u{2028}"))
+        }
+
+        let text = paragraphs.joined(separator: "\n\n")
+        return (text, i - startIndex)
     }
     
     private func parseTaskListItem(_ line: String) -> (checked: Bool, text: String)? {
@@ -684,8 +794,10 @@ private final class NativeMarkdownParser {
         ]
         
         let out = NSMutableAttributedString(attributedString: formatInline(text, baseAttributes: attrs))
-        out.append(NSAttributedString(string: "\n", attributes: attrs))
-        out.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: out.length))
+        // 確保全文（含 \n）都套用 blockquote paragraphStyle
+        if out.length > 0 {
+            out.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: out.length))
+        }
         return out
     }
     
@@ -870,12 +982,48 @@ private final class NativeMarkdownParser {
 
         let textTable = NSTextTable()
         textTable.numberOfColumns = colCount
+        // content-driven：小表格不強制撐滿視窗，避免每欄大片空白
         textTable.layoutAlgorithm = .automaticLayoutAlgorithm
         textTable.collapsesBorders = true
         textTable.hidesEmptyCells = false
-        textTable.setContentWidth(100, type: .percentageValueType)
 
         let out = NSMutableAttributedString()
+
+        // 估算欄寬：用字型量測出「內容導向」的 table 寬度（小表格會比較緊湊）
+        func measure(_ s: String, font: NSFont) -> CGFloat {
+            let text = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return 0 }
+            return (text as NSString).size(withAttributes: [.font: font]).width
+        }
+
+        // cell 的 padding / border（需與下方 block 設定一致）
+        let cellPadding: CGFloat = 6
+        let cellBorder: CGFloat = 1
+        let cellExtra: CGFloat = cellPadding * 2 + cellBorder * 2 + 8  // 多留一點避免緊貼
+
+        var colWidths = Array(repeating: CGFloat(0), count: colCount)
+        for (rIndex, row) in allRows.enumerated() {
+            for c in 0..<colCount {
+                let text = (c < row.count) ? row[c] : ""
+                let font = (rIndex == 0) ? theme.boldFont : theme.paragraphFont
+                colWidths[c] = max(colWidths[c], measure(text, font: font))
+            }
+        }
+        for c in 0..<colCount {
+            colWidths[c] += cellExtra
+        }
+
+        let intrinsicWidth = colWidths.reduce(0, +)
+        let maxWidth = maxTableWidth ?? CGFloat(900.0 * theme.zoom)
+        let useFixedColumns = intrinsicWidth > 0 && intrinsicWidth <= maxWidth
+
+        if useFixedColumns {
+            // 小表格：整張 table 依內容寬度
+            textTable.setContentWidth(intrinsicWidth, type: .absoluteValueType)
+        } else {
+            // 超寬表格：限制最大寬，讓 TextKit 以自動佈局 + 換行處理
+            textTable.setContentWidth(maxWidth, type: .absoluteValueType)
+        }
 
         func makeCellParagraph(
             row: Int,
@@ -897,12 +1045,18 @@ private final class NativeMarkdownParser {
             block.setBorderColor(theme.codeBorderColor)
             block.backgroundColor = isHeader ? theme.codeBackgroundColor : NSColor.clear
             block.verticalAlignment = .topAlignment
+            if useFixedColumns, col < colWidths.count {
+                // 小表格：每欄使用內容估算的固定寬度
+                block.setContentWidth(colWidths[col], type: .absoluteValueType)
+            }
 
             let paragraphStyle = NSMutableParagraphStyle()
             paragraphStyle.textBlocks = [block]
             paragraphStyle.paragraphSpacing = 0
             paragraphStyle.paragraphSpacingBefore = 0
-            paragraphStyle.lineSpacing = 1.5
+            paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
+            paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
+            paragraphStyle.lineBreakMode = .byWordWrapping
 
             let base: [NSAttributedString.Key: Any] = [
                 .font: isHeader ? theme.boldFont : theme.paragraphFont,

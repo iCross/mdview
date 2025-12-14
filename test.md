@@ -73,6 +73,10 @@ const renderMarkdown = (content) => {
 
 這是一個 [GitHub](https://github.com) 連結。
 
+### 外連圖片（placeholder）
+
+![外連圖片 placeholder](https://placehold.co/640x360/png?text=Markdown+Viewer)
+
 ---
 
 *感謝使用 Markdown Viewer!*

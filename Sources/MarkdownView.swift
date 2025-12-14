@@ -460,6 +460,11 @@ class MarkdownView: NSView, MarkdownRenderable {
     /// 使用 `WKWebView.takeSnapshot` 取得穩定的渲染結果（比 cacheDisplay 更可靠）。
     /// 用於 `--screenshot` 這類「啟動 GUI → 截圖 → 自動退出」的測試模式。
     func captureSnapshotPNG(to url: URL, completion: @escaping (Bool) -> Void) {
+        captureSnapshotPNG(to: url, fullPage: false, completion: completion)
+    }
+
+    /// - Parameter fullPage: true 時嘗試截取整份文件內容（超出安全上限會失敗）
+    func captureSnapshotPNG(to url: URL, fullPage: Bool, completion: @escaping (Bool) -> Void) {
         let dir = url.deletingLastPathComponent()
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -468,29 +473,132 @@ class MarkdownView: NSView, MarkdownRenderable {
             return
         }
 
-        let config = WKSnapshotConfiguration()
-        config.rect = webView.bounds
-
-        webView.takeSnapshot(with: config) { image, error in
-            if let error = error {
-                print("Snapshot 失敗: \(error)")
-            }
-            guard let image else {
-                completion(false)
-                return
-            }
+        func writeImage(_ image: NSImage?) -> Bool {
+            guard let image else { return false }
             guard let tiff = image.tiffRepresentation,
                   let rep = NSBitmapImageRep(data: tiff),
                   let data = rep.representation(using: .png, properties: [:]) else {
-                completion(false)
-                return
+                return false
             }
             do {
                 try data.write(to: url, options: .atomic)
-                completion(true)
+                return true
             } catch {
-                completion(false)
+                return false
             }
+        }
+
+        func takeSnapshot(rect: CGRect) {
+            let config = WKSnapshotConfiguration()
+            config.rect = rect
+            webView.takeSnapshot(with: config) { image, error in
+                if let error = error {
+                    print("Snapshot 失敗: \(error)")
+                }
+                completion(writeImage(image))
+            }
+        }
+
+        if fullPage {
+            // macOS 的 WKWebView 不一定暴露 scrollView API；改用 JS 取得文件尺寸。
+            let js = """
+            (function() {
+              const d = document.documentElement;
+              const b = document.body;
+              const width = Math.max(d ? d.scrollWidth : 0, b ? b.scrollWidth : 0, d ? d.clientWidth : 0);
+              const height = Math.max(d ? d.scrollHeight : 0, b ? b.scrollHeight : 0, d ? d.clientHeight : 0);
+              return { width, height };
+            })();
+            """
+            webView.evaluateJavaScript(js) { result, error in
+                if let error = error {
+                    print("JavaScript 執行錯誤（full-page size）: \(error)")
+                }
+
+                let fallback = self.webView.bounds
+                let maxHeight: CGFloat = 12_000
+
+                guard
+                    let dict = result as? [String: Any],
+                    let w = dict["width"] as? Double,
+                    let h = dict["height"] as? Double,
+                    w > 0, h > 0
+                else {
+                    takeSnapshot(rect: fallback)
+                    return
+                }
+
+                let width = max(fallback.width, CGFloat(w))
+                let height = max(fallback.height, CGFloat(h))
+                if height > maxHeight {
+                    print("Snapshot 失敗：內容過高 height=\(height) max=\(maxHeight)（建議改用 --screenshot-scroll-to）")
+                    completion(false)
+                    return
+                }
+                takeSnapshot(rect: CGRect(x: 0, y: 0, width: width, height: height))
+            }
+            return
+        }
+
+        takeSnapshot(rect: webView.bounds)
+    }
+
+    // MARK: - Screenshot scrolling helpers
+
+    private func escapeJavaScriptStringLiteral(_ s: String) -> String {
+        s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+    }
+
+    /// 捲到第一個包含指定文字的位置（供 `--screenshot-scroll-to` 使用）。
+    func scrollToFirstOccurrence(of text: String, completion: @escaping (Bool) -> Void) {
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if needle.isEmpty {
+            completion(false)
+            return
+        }
+
+        let escaped = escapeJavaScriptStringLiteral(needle)
+        let js = """
+        (function() {
+          const needle = "\(escaped)";
+          if (!needle) return false;
+          const root = document.body || document.documentElement;
+          if (!root) return false;
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          let node;
+          while ((node = walker.nextNode())) {
+            const v = node.nodeValue;
+            if (v && v.indexOf(needle) !== -1) {
+              const el = node.parentElement || root;
+              el.scrollIntoView({block: 'center', inline: 'nearest'});
+              return true;
+            }
+          }
+          return false;
+        })();
+        """
+
+        webView.evaluateJavaScript(js) { result, error in
+            if let error = error {
+                print("JavaScript 執行錯誤（scroll-to）: \(error)")
+            }
+            completion((result as? Bool) ?? false)
+        }
+    }
+
+    /// 捲到指定 y offset（點數；以「文件頂端」為 0）。
+    func scrollTo(y: CGFloat, completion: @escaping () -> Void) {
+        let v = max(0, y)
+        let js = "window.scrollTo(0, \(v)); true;"
+        webView.evaluateJavaScript(js) { _, error in
+            if let error = error {
+                print("JavaScript 執行錯誤（scroll-y）: \(error)")
+            }
+            completion()
         }
     }
 }

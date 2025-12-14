@@ -50,6 +50,51 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return nil
     }
 
+    private var screenshotIsFull: Bool {
+        CommandLine.arguments.contains("--screenshot-full")
+    }
+
+    private func parseValueAfterFlag(_ flag: String, in args: [String]) -> String? {
+        guard let idx = args.firstIndex(of: flag) else { return nil }
+        let next = idx + 1
+        guard next < args.count else { return nil }
+        let v = args[next]
+        return v.hasPrefix("-") ? nil : v
+    }
+
+    private var screenshotScrollToText: String? {
+        // 支援：
+        // - --screenshot-scroll-to <text>
+        // - --screenshot-scroll-to=<text>
+        let args = CommandLine.arguments
+        if let arg = args.first(where: { $0.hasPrefix("--screenshot-scroll-to=") }) {
+            let v = arg.replacingOccurrences(of: "--screenshot-scroll-to=", with: "")
+            return v.isEmpty ? nil : v
+        }
+        if args.contains("--screenshot-scroll-to"), let v = parseValueAfterFlag("--screenshot-scroll-to", in: args) {
+            return v
+        }
+        return nil
+    }
+
+    private var screenshotScrollY: CGFloat? {
+        // 支援：
+        // - --screenshot-scroll-y <number>
+        // - --screenshot-scroll-y=<number>
+        let args = CommandLine.arguments
+        if let arg = args.first(where: { $0.hasPrefix("--screenshot-scroll-y=") }) {
+            let v = arg.replacingOccurrences(of: "--screenshot-scroll-y=", with: "")
+            if v.isEmpty { return nil }
+            if let d = Double(v) { return CGFloat(d) }
+            return nil
+        }
+        if args.contains("--screenshot-scroll-y"), let v = parseValueAfterFlag("--screenshot-scroll-y", in: args) {
+            if let d = Double(v) { return CGFloat(d) }
+            return nil
+        }
+        return nil
+    }
+
     private var screenshotDelaySeconds: TimeInterval {
         // 支援：--screenshot-delay=1.2 或 --screenshot-delay 1.2
         let args = CommandLine.arguments
@@ -388,7 +433,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Watchdog：避免在自動化環境卡死（例如某些 AppKit/WKWebView 時序問題）
         let watchdog = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
-        watchdog.schedule(deadline: .now() + 8.0)
+        watchdog.schedule(deadline: .now() + 12.0)
         watchdog.setEventHandler {
             print("SCREENSHOT_TIMEOUT \(outputPath)")
             fflush(stdout)
@@ -406,17 +451,76 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // WebKit：用 takeSnapshot（更可靠）
             if self.rendererMode == .webKit, let mv = self.markdownView {
-                mv.captureSnapshotPNG(to: url) { ok in
-                    watchdog.cancel()
-                    print(ok ? "SCREENSHOT_OK \(outputPath)" : "SCREENSHOT_FAIL \(outputPath)")
-                    fflush(stdout)
-                    Darwin.exit(ok ? 0 : 1)
+                let doSnapshot: () -> Void = {
+                    mv.captureSnapshotPNG(to: url, fullPage: self.screenshotIsFull) { ok in
+                        watchdog.cancel()
+                        print(ok ? "SCREENSHOT_OK \(outputPath)" : "SCREENSHOT_FAIL \(outputPath)")
+                        fflush(stdout)
+                        Darwin.exit(ok ? 0 : 1)
+                    }
                 }
+
+                if let t = self.screenshotScrollToText {
+                    mv.scrollToFirstOccurrence(of: t) { found in
+                        if !found {
+                            watchdog.cancel()
+                            print("SCREENSHOT_SCROLL_TO_NOT_FOUND \(t) \(outputPath)")
+                            fflush(stdout)
+                            Darwin.exit(1)
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            doSnapshot()
+                        }
+                    }
+                    return
+                }
+                if let y = self.screenshotScrollY {
+                    mv.scrollTo(y: y) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            doSnapshot()
+                        }
+                    }
+                    return
+                }
+
+                doSnapshot()
                 return
             }
 
             // Native（或 fallback）：cacheDisplay 成 PNG（同步、無需螢幕錄製權限）
-            let ok = self.captureContentViewPNG(to: url)
+            if let t = self.screenshotScrollToText, self.rendererMode == .native {
+                let found = self.nativeMarkdownView?.scrollToFirstOccurrence(of: t) ?? false
+                if !found {
+                    watchdog.cancel()
+                    print("SCREENSHOT_SCROLL_TO_NOT_FOUND \(t) \(outputPath)")
+                    fflush(stdout)
+                    Darwin.exit(1)
+                }
+                self.window.displayIfNeeded()
+                self.window.contentView?.layoutSubtreeIfNeeded()
+                self.window.contentView?.displayIfNeeded()
+            } else if let y = self.screenshotScrollY, self.rendererMode == .native {
+                self.nativeMarkdownView?.scrollTo(y: y)
+                self.window.displayIfNeeded()
+                self.window.contentView?.layoutSubtreeIfNeeded()
+                self.window.contentView?.displayIfNeeded()
+            }
+
+            let ok: Bool
+            if self.screenshotIsFull, self.rendererMode == .native, let native = self.nativeMarkdownView {
+                let fullView = native.viewForFullScreenshot()
+                let bounds = fullView.bounds
+                let maxHeight: CGFloat = 12_000
+                if bounds.height > maxHeight {
+                    print("SCREENSHOT_TOO_TALL height=\(bounds.height) max=\(maxHeight) (use --screenshot-scroll-to) \(outputPath)")
+                    ok = false
+                } else {
+                    ok = self.captureViewPNG(fullView, bounds: bounds, to: url)
+                }
+            } else {
+                ok = self.captureContentViewPNG(to: url)
+            }
+
             watchdog.cancel()
             print(ok ? "SCREENSHOT_OK \(outputPath)" : "SCREENSHOT_FAIL \(outputPath)")
             fflush(stdout)
@@ -427,20 +531,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func captureContentViewPNG(to url: URL) -> Bool {
         guard let contentView = window.contentView else { return false }
 
+        return captureViewPNG(contentView, bounds: contentView.bounds, to: url)
+    }
+
+    private func captureViewPNG(_ view: NSView, bounds: CGRect, to url: URL) -> Bool {
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         } catch {
             return false
         }
 
-        let bounds = contentView.bounds
         guard bounds.width > 2, bounds.height > 2 else { return false }
 
-        contentView.layoutSubtreeIfNeeded()
-        contentView.displayIfNeeded()
+        view.layoutSubtreeIfNeeded()
+        view.displayIfNeeded()
 
-        guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else { return false }
-        contentView.cacheDisplay(in: bounds, to: rep)
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { return false }
+        view.cacheDisplay(in: bounds, to: rep)
 
         guard let data = rep.representation(using: .png, properties: [:]) else { return false }
         do {

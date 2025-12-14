@@ -295,6 +295,57 @@ func testCompilation(_ runner: TestRunner) {
         return size.intValue > 10_000
     }
 
+    // Blockquote 空行/段落間距：用純文字輸出做 deterministic regression
+    runner.run("mdviewer --native-render-text：blockquote 內 `>` 空行應產生段落分隔") {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let tmpFile = tmpDir.appendingPathComponent("mdviewer-blockquote-spacing-\(UUID().uuidString).md")
+        let markdown = """
+        > line1
+        > line2
+        >
+        > — author
+        """
+
+        do {
+            try markdown.write(to: tmpFile, atomically: true, encoding: .utf8)
+        } catch {
+            return false
+        }
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+
+        let result = runProcess("\(basePath)/mdviewer", ["--native-render-text", tmpFile.path], timeoutSeconds: 2.0)
+        let output = result.output
+
+        // 期待：
+        // - line1 與 line2 間只有換行（同一段落內換行）
+        // - line2 與 author 間有一個空行（段落分隔）
+        return !result.didTimeout && result.terminationStatus == 0 &&
+               output.contains("line1\nline2\n\n— author") &&
+               !output.contains("line1\n\nline2")
+    }
+
+    // Screenshot + scroll-to：確保能穩定截到非首屏區塊（table/quote 等）
+    runner.run("mdviewer --screenshot-scroll-to 可捲動並輸出 PNG") {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let out = tmpDir.appendingPathComponent("mdviewer-screenshot-scroll-to-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: out) }
+
+        let fixture = "\(basePath)/Fixtures/table_width.md"
+        let result = runProcess(
+            "\(basePath)/mdviewer",
+            ["--no-activate", "--native", "--screenshot", out.path, "--screenshot-delay", "0.2", "--screenshot-scroll-to", "SCROLLTARGETTABLE", fixture],
+            timeoutSeconds: 10.0
+        )
+        guard !result.didTimeout, result.terminationStatus == 0, result.output.contains("SCREENSHOT_OK") else { return false }
+
+        guard FileManager.default.fileExists(atPath: out.path) else { return false }
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: out.path),
+              let size = attrs[.size] as? NSNumber else {
+            return false
+        }
+        return size.intValue > 10_000
+    }
+
     // CLI help：不應啟動 GUI，且應快速退出
     runner.run("mdviewer --help 可正常退出並顯示使用說明") {
         let result = runProcess("\(basePath)/mdviewer", ["--help"], timeoutSeconds: 2.0)

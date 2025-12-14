@@ -25,6 +25,8 @@ debug: $(SOURCES)
 	@echo "🔨 編譯 Debug 版本..."
 	@perl -e 'alarm shift; exec @ARGV' 300 swift build -c debug --product $(APP_NAME)
 	@cp -f .build/debug/$(APP_NAME) ./$(APP_NAME)
+	@# macOS Gatekeeper 在部分環境會拒絕執行未簽章二進制；用 ad-hoc sign 確保可在測試/子行程中正常啟動
+	@/usr/bin/codesign --force --sign - ./$(APP_NAME)
 	@echo "✅ 編譯完成: ./$(APP_NAME)"
 
 # Release 版本
@@ -32,6 +34,7 @@ release: $(SOURCES)
 	@echo "🚀 編譯 Release 版本..."
 	@perl -e 'alarm shift; exec @ARGV' 300 swift build -c release --product $(APP_NAME)
 	@cp -f .build/release/$(APP_NAME) ./$(APP_NAME)
+	@/usr/bin/codesign --force --sign - ./$(APP_NAME)
 	@echo "✅ 編譯完成: ./$(APP_NAME)"
 
 # 清除編譯產物
