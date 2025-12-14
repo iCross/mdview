@@ -30,10 +30,24 @@ make smoke
   - `--screenshot-delay <sec>`（等待秒數；預設 1.0，WebKit 建議 >= 1.0）
   - `--no-activate`（避免在 background job/子行程環境強制拉前景）
 
-範例：
+## GUI 截圖（給 LLM / CI）
+- **用途**：把 GUI 渲染結果轉成 PNG，方便在 CI/agent 端檢查 table / quote / code block 等視覺結果。
+- **輸出位置**：建議用 repo 內的 `.tmp/`（已在 `.gitignore` 忽略）；輸出資料夾會自動建立。
+- **成功/失敗訊號**：
+  - 成功：stdout 會印 `SCREENSHOT_OK <path>`，exit code = 0
+  - 失敗：stdout 會印 `SCREENSHOT_FAIL <path>`，exit code = 1
+  - 超時：stdout 會印 `SCREENSHOT_TIMEOUT <path>`，exit code = 2
+
+範例（Native，建議）：
 ```bash
-# 產生一張 Native renderer 的截圖（不需要螢幕錄製權限）
-./mdviewer --native --screenshot /tmp/mdviewer.png --screenshot-delay 0.2 test.md
+./mdviewer --no-activate --native --screenshot .tmp/mdviewer-native.png --screenshot-delay 0.2 test.md
+open .tmp/mdviewer-native.png
+```
+
+範例（WebKit，deprecated；通常需要更久的 delay）：
+```bash
+./mdviewer --no-activate --webkit --screenshot .tmp/mdviewer-webkit.png --screenshot-delay 1.0 test.md
+open .tmp/mdviewer-webkit.png
 ```
 
 ## 程式碼入口（找功能先看這些）

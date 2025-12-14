@@ -9,7 +9,7 @@
 - **雙渲染路線**：
   - **WebKit（deprecated）**：`WKWebView`（marked.js / highlight.js 走 CDN）。仍可用但不建議；後續預計移除。
   - **Native**：`NSTextView`（自寫簡化 parser/regex 上色；支援 table / image / quote / fenced code block）
-- **CLI（測試/除錯要用）**：`--help`、`--native-dump`、`--native-render-text`、`--native-pipeline=regex|ast`（或 `--native-ast`）、`--smoke-test`、`--screenshot`
+- **CLI（測試/除錯要用）**：`--help`、`--native-dump`、`--native-render-text`、`--native-pipeline=regex|ast`（或 `--native-ast`）、`--smoke-test`、`--screenshot`、`--no-activate`
 - **不變式（避免回歸）**：
   - Native code block / quote **不能每字換行**（`NSTextBlock.setContentWidth(100%, ...)` 等處理必須保留）
   - `NSTextView` 寬度需跟著 scroll/視窗變化 **強制 reflow**（監聽 `NSClipView` bounds/frame 變更）
@@ -24,4 +24,7 @@
 make debug
 make test
 ./mdviewer test.md
+
+# GUI 視覺驗證（產出 PNG，供 LLM/CI 檢查）
+./mdviewer --no-activate --native --screenshot .tmp/mdviewer.png --screenshot-delay 0.2 test.md
 ```
