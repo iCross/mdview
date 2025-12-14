@@ -54,3 +54,7 @@
 ### 本階段變更（已完成）
 - `syncTextContainerWidth()` 改用 `scrollView.contentSize.width` 作為可用寬度，並扣掉 `textContainerInset` 以得到實際 `textContainer.containerSize.width`。
 - 新增 CLI：`--native-skeleton-check`（不啟動 GUI），會模擬多次視窗寬度變化並輸出 `SKELETON_OK/FAIL` 與每次同步結果，作為回歸測試基準。
+
+## 階段D：typography（進行中）
+- 將段落樣式集中為 Notes 風格的 `NSParagraphStyle`（lineHeightMultiple/lineSpacing/paragraphSpacing），並把段落分隔改為「單一換行 + paragraphSpacing」。
+- 設定 `NSTextContainer.lineFragmentPadding = 0`，避免左右 padding 與 `textContainerInset` 疊加造成視覺不一致。

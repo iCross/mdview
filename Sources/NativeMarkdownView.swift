@@ -91,6 +91,8 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
             container.widthTracksTextView = true
             container.heightTracksTextView = false
             container.containerSize = NSSize(width: bounds.width, height: CGFloat.greatestFiniteMagnitude)
+            // Notes 風格：避免 TextKit 預設 padding 影響左右邊界（我們用 textContainerInset 控制）
+            container.lineFragmentPadding = 0
         }
         
         // 關鍵：documentView（NSTextView）需要有初始尺寸，否則可能變成極小寬度導致每字換行
@@ -368,6 +370,32 @@ private struct NativeMarkdownTheme {
     }
     
     var monoFont: NSFont { NSFont.monospacedSystemFont(ofSize: codeFontSize, weight: .regular) }
+
+    // Notes 風格 paragraph style（Reader 為主：一致行高、段落間距）
+    var baseParagraphStyle: NSParagraphStyle {
+        let p = NSMutableParagraphStyle()
+        p.lineHeightMultiple = 1.22
+        p.lineSpacing = 2
+        p.paragraphSpacing = 8
+        p.paragraphSpacingBefore = 0
+        p.hyphenationFactor = 0
+        p.lineBreakMode = .byWordWrapping
+        return p
+    }
+
+    func headingParagraphStyle(level: Int) -> NSParagraphStyle {
+        let p = baseParagraphStyle.mutableCopy() as! NSMutableParagraphStyle
+        // 標題：讓上下更有呼吸感
+        switch level {
+        case 1:
+            p.paragraphSpacing = 12
+        case 2:
+            p.paragraphSpacing = 10
+        default:
+            p.paragraphSpacing = 8
+        }
+        return p
+    }
     
     // 動態色彩（自動跟隨深色/淺色）
     var textColor: NSColor { .textColor }
@@ -414,10 +442,12 @@ private final class NativeMarkdownParser {
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: theme.paragraphFont,
-                .foregroundColor: theme.textColor
+                .foregroundColor: theme.textColor,
+                .paragraphStyle: theme.baseParagraphStyle
             ]
             output.append(formatInline(text, baseAttributes: attrs))
-            output.append(NSAttributedString(string: "\n\n"))
+            // 段落間距由 paragraphStyle 的 paragraphSpacing 控制，這裡只加單一換行
+            output.append(NSAttributedString(string: "\n"))
         }
         
         var pendingParagraphLines: [String] = []
@@ -438,7 +468,7 @@ private final class NativeMarkdownParser {
                     // close
                     flushPendingParagraph()
                     output.append(renderCodeBlock(codeBuffer.joined(separator: "\n"), language: codeFenceLanguage))
-                    output.append(NSAttributedString(string: "\n\n"))
+                    output.append(NSAttributedString(string: "\n"))
                     inCodeFence = false
                     codeFenceLanguage = ""
                     codeBuffer.removeAll(keepingCapacity: true)
@@ -472,7 +502,7 @@ private final class NativeMarkdownParser {
             if trimmed == "---" || trimmed == "----" || trimmed == "-----" {
                 flushPendingParagraph()
                 output.append(renderHorizontalRule())
-                output.append(NSAttributedString(string: "\n\n"))
+                output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
             }
@@ -481,7 +511,7 @@ private final class NativeMarkdownParser {
             if let heading = parseHeading(line) {
                 flushPendingParagraph()
                 output.append(renderHeading(level: heading.level, text: heading.text))
-                output.append(NSAttributedString(string: "\n\n"))
+                output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
             }
@@ -490,7 +520,7 @@ private final class NativeMarkdownParser {
             if let quoteText = parseBlockquote(line) {
                 flushPendingParagraph()
                 output.append(renderBlockquote(quoteText))
-                output.append(NSAttributedString(string: "\n\n"))
+                output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
             }
@@ -500,7 +530,7 @@ private final class NativeMarkdownParser {
                 flushPendingParagraph()
                 let (table, consumed) = parseTable(from: lines, startIndex: i)
                 output.append(renderTable(table))
-                output.append(NSAttributedString(string: "\n\n"))
+                output.append(NSAttributedString(string: "\n"))
                 i += consumed
                 continue
             }
@@ -603,7 +633,8 @@ private final class NativeMarkdownParser {
     private func renderHeading(level: Int, text: String) -> NSAttributedString {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: theme.headingFont(level: level),
-            .foregroundColor: theme.textColor
+            .foregroundColor: theme.textColor,
+            .paragraphStyle: theme.headingParagraphStyle(level: level)
         ]
         return formatInline(text, baseAttributes: attrs)
     }
@@ -620,8 +651,9 @@ private final class NativeMarkdownParser {
         
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.textBlocks = [block]
-        paragraphStyle.paragraphSpacing = 6
-        paragraphStyle.lineSpacing = 2
+        paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
+        paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
+        paragraphStyle.paragraphSpacing = 10
         
         let attrs: [NSAttributedString.Key: Any] = [
             .font: theme.paragraphFont,
@@ -639,6 +671,8 @@ private final class NativeMarkdownParser {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.headIndent = 22
         paragraphStyle.firstLineHeadIndent = 0
+        paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
+        paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
         paragraphStyle.paragraphSpacing = 2
         
         let base: [NSAttributedString.Key: Any] = [
@@ -655,7 +689,9 @@ private final class NativeMarkdownParser {
     private func renderHorizontalRule() -> NSAttributedString {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
-        paragraphStyle.paragraphSpacing = 6
+        paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
+        paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
+        paragraphStyle.paragraphSpacing = 10
         
         return NSAttributedString(string: "──────────", attributes: [
             .font: theme.paragraphFont,
@@ -676,8 +712,9 @@ private final class NativeMarkdownParser {
         
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.textBlocks = [block]
+        paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
+        paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
         paragraphStyle.paragraphSpacing = 10
-        paragraphStyle.lineSpacing = 2
         
         let baseAttrs: [NSAttributedString.Key: Any] = [
             .font: theme.monoFont,
