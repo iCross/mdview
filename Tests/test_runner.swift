@@ -242,18 +242,35 @@ func testCompilation(_ runner: TestRunner) {
 
     // 在某些自動化環境中（例如無 GUI session/WindowServer 或平台限制），
     // AppKit 程式可能會被系統直接 SIGKILL（terminationStatus=9）。
-    // 這會讓以下「以子行程啟動 mdviewer」的測試全部失真，改為偵測後跳過。
+    // 但「直接跳過」會掩蓋本機回歸：因此預設採 FAIL，只有明確設定環境變數才允許 skip。
     let basePath = FileManager.default.currentDirectoryPath
+    let allowSkipSubprocess = (ProcessInfo.processInfo.environment["MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS"] == "1")
+
     let probe = runProcess("\(basePath)/mdviewer", ["--help"], timeoutSeconds: 2.0)
     let canRunMdviewer = !probe.didTimeout && probe.terminationStatus == 0
     if !canRunMdviewer {
-        print("  ⚠️ 跳過 mdviewer 子行程測試：status=\(probe.terminationStatus) timeout=\(probe.didTimeout)")
-        return
+        if allowSkipSubprocess {
+            print("  ⚠️ 跳過 mdviewer 子行程測試（MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1）：status=\(probe.terminationStatus) timeout=\(probe.didTimeout)")
+            return
+        } else {
+            runner.run(
+                "mdviewer 子行程可正常啟動（--help）",
+                test: { false },
+                message: "status=\(probe.terminationStatus) timeout=\(probe.didTimeout)"
+            )
+            return
+        }
     }
     
     // GUI smoke test：確保從 CLI 啟動能建立視窗並自動退出
     runner.run("mdviewer --smoke-test 可正常顯示 GUI 並退出") {
         let result = runProcess("\(basePath)/mdviewer", ["--smoke-test"], timeoutSeconds: 5.0)
+        return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SMOKE_OK")
+    }
+
+    // 背景/子行程環境下，強制 activate 可能導致系統直接打死；因此提供 --no-activate 作保險。
+    runner.run("mdviewer --no-activate --smoke-test 可正常退出") {
+        let result = runProcess("\(basePath)/mdviewer", ["--no-activate", "--smoke-test"], timeoutSeconds: 5.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SMOKE_OK")
     }
 

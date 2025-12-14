@@ -17,6 +17,8 @@ make smoke
 ## CLI（以程式碼為準：`Sources/main.swift`）
 - **Renderer**：`--webkit`（deprecated；目前仍可用且可能仍為預設）、`--native`、`--renderer=webkit|native`
 - **Native pipeline**：`--native-pipeline=regex|ast`、`--native-ast`
+- **前景/背景啟動注意事項**：
+  - 若你用 `&` 把它當 background job 跑，或在某些自動化/子行程環境，強制 `activate` 可能導致程式被系統直接終止；可加 `--no-activate` 避免。
 - **CI/除錯（不啟動 GUI）**：
   - `--native-dump <file.md>`
   - `--native-render-text <file.md>`
@@ -26,6 +28,7 @@ make smoke
 - **GUI screenshot（給 LLM / CI 做視覺驗證）**：
   - `--screenshot <out.png>`（啟動 GUI、渲染後輸出 PNG，然後自動退出）
   - `--screenshot-delay <sec>`（等待秒數；預設 1.0，WebKit 建議 >= 1.0）
+  - `--no-activate`（避免在 background job/子行程環境強制拉前景）
 
 範例：
 ```bash
@@ -46,6 +49,14 @@ make smoke
 ## 不變式（回歸最常發生在這）
 - **Native 不能每字換行**：`NSTextContainer` 寬度要跟著 `NSScrollView` 可視寬同步，並在幾何變更時強制 reflow。
 - **所有 build/test/子行程必須有 timeout**：避免卡死（Makefile 已包 timeout；測試也應同樣保守）。
+
+## 測試在「無法啟動子行程 GUI」環境的處理
+預設 `make test` 會把「mdviewer 子行程不可執行」視為失敗（避免掩蓋回歸）。
+若你在特殊環境（例如無 GUI session/平台限制）需要跳過這段，改用：
+
+```bash
+MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1 make test
+```
 
 ## 其他文件（都以「給 LLM 用」為前提）
 - `todo.md`：僅保留仍未完成的 TODO 與關鍵決策/不變式

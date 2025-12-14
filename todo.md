@@ -13,6 +13,7 @@
 - **不變式（避免回歸）**：
   - Native code block / quote **不能每字換行**（`NSTextBlock.setContentWidth(100%, ...)` 等處理必須保留）
   - `NSTextView` 寬度需跟著 scroll/視窗變化 **強制 reflow**（監聽 `NSClipView` bounds/frame 變更）
+  - 從 background job/子行程環境啟動時 **不要強制 activate**（必要時用 `--no-activate`；否則有機會被系統直接終止）
   - 所有 build/test/子行程都要有 **timeout + kill**（避免卡死）
 
 ## 仍待處理（唯一保留 TODO）

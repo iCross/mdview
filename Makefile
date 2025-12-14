@@ -15,7 +15,7 @@ FRAMEWORKS = -framework AppKit -framework WebKit
 DEBUG_FLAGS = -g -Onone
 RELEASE_FLAGS = -O -whole-module-optimization
 
-.PHONY: all debug release clean run run-empty test smoke help
+.PHONY: all debug release clean run run-empty run-ci run-empty-ci test smoke help
 
 # 預設目標：Debug 版本
 all: debug
@@ -41,14 +41,23 @@ clean:
 	trash -F .build
 	@echo "✅ 清除完成"
 
-# 執行應用程式（使用測試檔案）
+# 執行應用程式（使用測試檔案；互動式，預期會常駐）
 run: debug
 	@echo "▶️ 執行應用程式..."
-	@perl -e 'alarm shift; exec @ARGV' 30 ./$(APP_NAME) test.md
+	@./$(APP_NAME) test.md
 
-# 執行應用程式（無檔案參數）
+# 執行應用程式（無檔案；互動式，預期會常駐）
 run-empty: debug
 	@echo "▶️ 執行應用程式（無檔案）..."
+	@./$(APP_NAME)
+
+# 執行應用程式（CI/自動化用：加 timeout 避免卡住）
+run-ci: debug
+	@echo "▶️ 執行應用程式（CI timeout 30s）..."
+	@perl -e 'alarm shift; exec @ARGV' 30 ./$(APP_NAME) test.md
+
+run-empty-ci: debug
+	@echo "▶️ 執行應用程式（無檔案；CI timeout 30s）..."
 	@perl -e 'alarm shift; exec @ARGV' 30 ./$(APP_NAME)
 
 # 執行測試（先確保 binary 為最新）
@@ -72,6 +81,8 @@ help:
 	@echo "  make clean    - 清除編譯產物"
 	@echo "  make run      - 編譯並執行（使用 test.md）"
 	@echo "  make run-empty- 編譯並執行（無檔案）"
+	@echo "  make run-ci   - 編譯並執行（使用 test.md；timeout 30s）"
+	@echo "  make run-empty-ci - 編譯並執行（無檔案；timeout 30s）"
 	@echo "  make test     - 執行測試"
 	@echo ""
 	@echo "執行方式:"

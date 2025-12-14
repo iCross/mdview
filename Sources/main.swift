@@ -17,6 +17,7 @@ func printHelp() {
       --native                 使用原生渲染器（NSTextView）
       --webkit                 使用 WebKit 渲染器（預設）
       --renderer=native|webkit 指定渲染器
+      --no-activate            不強制把 App 拉到前景（建議在 background job `&` 或某些自動化環境使用）
       --native-pipeline=regex|ast
                               指定 Native Markdown 管線（預設 regex；ast 會在遇到 table/task/image 時 fallback）
       --native-ast             等同 --native-pipeline=ast

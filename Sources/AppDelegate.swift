@@ -163,9 +163,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         window.makeKeyAndOrderFront(nil)
-        if activate {
+        if activate && shouldActivateAppInThisSession() {
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+
+    private func shouldActivateAppInThisSession() -> Bool {
+        // 在某些環境（例如被當成 background job `&` 啟動，或在無互動 TTY 的子行程中）
+        // 強制 activate 可能會被系統拒絕，甚至直接 SIGKILL。
+        // 策略：只有「前景互動 TTY」才 activate；否則安靜地跳過。
+        if isAutomationMode { return false }
+        if CommandLine.arguments.contains("--no-activate") { return false }
+
+        // 若 stdin 不是 TTY（例如被 CI/測試 runner 啟動），就不要 activate。
+        if isatty(STDIN_FILENO) == 0 { return false }
+
+        // 若不是 controlling terminal 的前景 process group（典型：`cmd &` 背景 job），不要 activate。
+        let fg = tcgetpgrp(STDIN_FILENO)
+        if fg == -1 { return false }
+        return fg == getpgrp()
     }
     
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
