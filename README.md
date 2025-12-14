@@ -153,6 +153,18 @@ Native renderer 已可使用，目標是「更輕量、更像 macOS Notes 的一
 - **純 Reader**：`isEditable = false`、`isSelectable = true`，最接近 Notes 的閱讀體驗，工程量也較可控。
 - **Reader + Editor**：仍可做 Notes 感，但要處理貼上樣式、游標、選取區、高亮更新等更多坑。
 
+### 已決定的管線（短期 / 中期）
+
+- **Markdown 管線**：
+  - **短期**：維持本 repo 的 `NativeMarkdownParser`（regex + 手刻 block parser），因為已支援 table/image/task list 等需求
+  - **中期**：改走 **AST（`swift-markdown`）** 作為基底（可維護性優先），並自行補齊/混合處理 **GFM 的 table/task/image**
+
+- **語法高亮管線**：
+  - **短期**：維持 regex 高亮（已可用）
+  - **中期**：導入 **Highlightr**
+    - 純 Reader：先用於 **code block render-time** 高亮（輸出 `NSAttributedString`）
+    - 若未來做 Editor：改用 `CodeAttributedString`（`NSTextStorage` 子類）走 **incremental highlight**（只更新 attributes）
+
 ### 用 `gh` 直接 clone 參考 repo
 
 ```bash

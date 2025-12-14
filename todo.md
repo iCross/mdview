@@ -50,8 +50,8 @@
 
 ### 方向決策
 - [x] 決定產品型態：**純 Reader（不可編輯）** vs **Reader + Editor（可編輯但強制一致 typography + 高亮）**（決定：純 Reader）
-- [ ] 決定 Markdown 管線：維持自寫 parser / 改用 AST（優先）/ 第三方套件
-- [ ] 決定語法高亮管線：維持 regex / `NSTextStorageDelegate` / `NSTextStorage` 子類（優先 Highlightr 類型）
+- [x] 決定 Markdown 管線：**短期維持自寫 parser（已支援 table/image/task）**；中期改走 **AST（swift-markdown）+ 自行補齊 GFM table/task/image**（或混合策略），以可維護性優先
+- [x] 決定語法高亮管線：**短期維持 regex（現況可用）**；中期導入 **Highlightr**（render-time code block 高亮；若未來做 Editor，改用 `CodeAttributedString` 走 incremental highlight）
 
 ### 先抓下來看的 repo（用 `gh`）
 > 目標：直接複製「NSTextView + NSScrollView + width 跟著視窗變」的穩定骨架，再疊 Markdown → NSAttributedString 與 incremental highlight。
