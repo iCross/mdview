@@ -63,6 +63,9 @@ gh repo clone raspu/Highlightr
 gh repo clone krzyzanowskim/STTextView
 ```
 
+- [x] 已 clone 參考 repo 到專案根目錄（`Highlightr/`、`MarkdownAttributedString/`、`MarkdownToAttributedString/`、`STTextView/`；皆在 `.gitignore`，不會進版控）
+- [x] 已在 README 補上「參考 repo 筆記」摘要（Markdown AST / Highlightr / sizing / 授權注意事項）
+
 ### 優先驗證項目（比「功能加更多」更重要）
 - [ ] Scroll/寬度骨架：`NSTextView` 放進 `NSScrollView`，視窗縮放時**不會變成每字換行**、不會出現水平捲動
 - [ ] Notes 風格 typography：`textContainerInset` + `NSParagraphStyle`（lineHeight/spacing 策略）一致套用（含貼上內容）

@@ -162,6 +162,27 @@ gh repo clone raspu/Highlightr
 gh repo clone krzyzanowskim/STTextView
 ```
 
+### 參考 repo 筆記（對照重點）
+
+這些 repo 只用來「看骨架/看管線」，本專案已在 `.gitignore` 排除它們的目錄（`Highlightr/`、`MarkdownToAttributedString/`、`MarkdownAttributedString/`、`STTextView/`），避免誤提交。
+
+- **Highlightr**：提供兩條路徑
+  - `Highlightr.highlight(_:as:)`：把 code 字串轉成 `NSAttributedString`（語法高亮）
+  - `CodeAttributedString`（`NSTextStorage` 子類）：適合做 **incremental highlight**（只更新 attributes，不動 characters）
+  - 技術上依賴 `JavaScriptCore` 跑 `highlight.js`，速度在「code block / editor」場景通常可接受
+
+- **MarkdownToAttributedString**：用 `swift-markdown` 的 `Document(parsing:)` 建 AST，再用 visitor 轉成 `NSAttributedString`
+  - 優點：語意正確、可維護性高，適合作為「AST 管線」基底
+  - 注意：該 repo 目前 **不支援 tables / task lists / images**（本專案若採用，需要自行補齊或混合策略）
+
+- **MarkdownAttributedString**：Objective-C category，把 markdown span（link/emphasis/code span）轉成 attributed string
+  - 優點：概念上很輕、可離線、好做 localization
+  - 侷限：刻意不做 headers/lists 等 block elements；更像是「span rich text」工具
+
+- **STTextView**：TextKit 2 的 `NSTextView`/`UITextView` replacement（偏 editor）
+  - 可學：`typingAttributes[.paragraphStyle]`、lineHeight、wrap/no-wrap 等實務坑與 workaround
+  - 授權：GPL/commercial，**不要複製其程式碼進本 repo**（僅用來觀察 sizing 行為/坑）
+
 ### 重要備註（授權/整合策略）
 
 - **STTextView**：此專案授權為 GPL/commercial（不適合直接搬碼進本 repo）。本專案僅用來「觀察/驗證」`NSTextView + NSScrollView` 的 sizing 行為與常見坑，**不要複製其程式碼**。
