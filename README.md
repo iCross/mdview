@@ -18,7 +18,7 @@ make smoke
 ## CLI（以 `Sources/main.swift` 為準）
 - **前景/背景啟動**：`--no-activate`（在 background job `&` / 子行程 / CI 內建議加，避免被系統終止）
 - **主題（Theme）**：`--theme=system|light|dark`（預設 system；也可用選單 `檢視 → 主題` 切換）
-- **Native pipeline**：`--native-pipeline=regex|ast`、`--native-ast`
+- **Markdown pipeline**：`--pipeline=regex|ast`、`--ast`
 - **GUI smoke**：`--smoke-test`（建立視窗後自動退出）
 - **GUI screenshot（CI/LLM 視覺驗證）**：
   - `--screenshot <out.png>`、`--screenshot-delay <sec>`（預設 1.0）

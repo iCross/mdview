@@ -460,6 +460,11 @@ struct NativeMarkdownTheme {
     }
     
     var monoFont: NSFont { NSFont.monospacedSystemFont(ofSize: codeFontSize, weight: .regular) }
+    
+    /// inline code 用：跟隨當下文字大小（避免在標題/大字時 inline code 看起來特別小）
+    func monoFont(ofSize size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+        NSFont.monospacedSystemFont(ofSize: size, weight: weight)
+    }
 
     // Notes 風格 paragraph style（Reader 為主：一致行高、段落間距）
     var baseParagraphStyle: NSParagraphStyle {
@@ -635,14 +640,14 @@ private final class NativeMarkdownParser {
             // 待辦清單 / 無序清單
             if let task = parseTaskListItem(line) {
                 flushPendingParagraph()
-                output.append(renderListItem(prefix: task.checked ? "☑︎ " : "☐ ", text: task.text))
+                output.append(renderListItem(prefix: task.checked ? "☑︎" : "☐", text: task.text))
                 output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
             }
             if let bullet = parseBulletListItem(line) {
                 flushPendingParagraph()
-                output.append(renderListItem(prefix: "• ", text: bullet))
+                output.append(renderListItem(prefix: "•", text: bullet))
                 output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
@@ -651,7 +656,8 @@ private final class NativeMarkdownParser {
             // 有序清單（1.）
             if let ordered = parseOrderedListItem(line) {
                 flushPendingParagraph()
-                output.append(renderListItem(prefix: "\(ordered.index). ", text: ordered.text))
+                // ordered list：用 "." + tab 做對齊（類似 Notes）
+                output.append(renderListItem(prefix: "\(ordered.index).", text: ordered.text))
                 output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
@@ -807,8 +813,15 @@ private final class NativeMarkdownParser {
     
     private func renderListItem(prefix: String, text: String) -> NSAttributedString {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.headIndent = 22
+        // Notes.app 風格：用 tab stop 做出「符號/數字在左、文字統一對齊」的 hanging indent。
+        // - prefix 後用 \t
+        // - text 從 tab stop 開始
         paragraphStyle.firstLineHeadIndent = 0
+        paragraphStyle.headIndent = 30
+        paragraphStyle.tabStops = [
+            NSTextTab(textAlignment: .left, location: paragraphStyle.headIndent, options: [:])
+        ]
+        paragraphStyle.defaultTabInterval = paragraphStyle.headIndent
         paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
         paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
         paragraphStyle.paragraphSpacing = 2
@@ -819,7 +832,8 @@ private final class NativeMarkdownParser {
             .paragraphStyle: paragraphStyle
         ]
         
-        let out = NSMutableAttributedString(string: prefix, attributes: base)
+        // prefix 不要帶尾端空白，改由 \t 讓文字對齊 tab stop
+        let out = NSMutableAttributedString(string: "\(prefix)\t", attributes: base)
         out.append(formatInline(text, baseAttributes: base))
         return out
     }
@@ -1108,8 +1122,9 @@ private final class NativeMarkdownParser {
             in: attributed,
             replaceWithCapture: 1
         ) { range in
+            let baseFont = (baseAttributes[.font] as? NSFont) ?? theme.paragraphFont
             attributed.addAttributes([
-                .font: theme.monoFont,
+                .font: theme.monoFont(ofSize: baseFont.pointSize),
                 .backgroundColor: theme.codeBackgroundColor,
                 .foregroundColor: theme.textColor,
                 Self.isCodeAttribute: true

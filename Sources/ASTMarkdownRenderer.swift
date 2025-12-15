@@ -122,8 +122,9 @@ struct ASTMarkdownRenderer {
         }
 
         mutating func visitInlineCode(_ inlineCode: InlineCode) {
+            let baseFont = (currentAttributes[.font] as? NSFont) ?? theme.paragraphFont
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: theme.monoFont,
+                .font: theme.monoFont(ofSize: baseFont.pointSize),
                 .foregroundColor: theme.textColor,
                 .backgroundColor: theme.codeBackgroundColor,
                 .paragraphStyle: theme.baseParagraphStyle
@@ -251,21 +252,25 @@ struct ASTMarkdownRenderer {
                 case .unordered(let depth):
                     let bullets = ["•", "◦", "▪", "▫"]
                     let bullet = bullets[depth % bullets.count]
-                    prefix = "\(bullet) "
+                    prefix = "\(bullet)"
                     headIndent = 22 + CGFloat(depth) * 16
                 case .ordered(let depth, let start):
                     let idx = start + listItem.indexInParent
-                    prefix = "\(idx). "
+                    prefix = "\(idx)."
                     headIndent = 26 + CGFloat(depth) * 16
                 }
             } else {
-                prefix = "• "
+                prefix = "•"
                 headIndent = 22
             }
 
             let p = NSMutableParagraphStyle()
             p.firstLineHeadIndent = 0
             p.headIndent = headIndent
+            p.tabStops = [
+                NSTextTab(textAlignment: .left, location: headIndent, options: [:])
+            ]
+            p.defaultTabInterval = headIndent
             p.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
             p.lineSpacing = theme.baseParagraphStyle.lineSpacing
             p.paragraphSpacing = 2
@@ -274,7 +279,7 @@ struct ASTMarkdownRenderer {
             currentAttributes[.font] = theme.paragraphFont
             currentAttributes[.foregroundColor] = theme.textColor
 
-            out.append(NSAttributedString(string: prefix, attributes: currentAttributes))
+            out.append(NSAttributedString(string: "\(prefix)\t", attributes: currentAttributes))
             visitChildren(of: listItem)
             out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
 

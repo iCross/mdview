@@ -104,16 +104,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var preferredNativePipeline: NativeMarkdownPipeline {
         // 支援：
-        // - --native-pipeline=regex|ast
-        // - --native-ast（等同 ast）
-        // - --pipeline=regex|ast（alias）
-        // - --ast（alias）
+        // - --pipeline=regex|ast
+        // - --ast（等同 --pipeline=ast）
         let args = CommandLine.arguments
-        if args.contains("--native-ast") || args.contains("--ast") { return .ast }
-        if let pipelineArg = args.first(where: { $0.hasPrefix("--native-pipeline=") }) {
-            let value = pipelineArg.replacingOccurrences(of: "--native-pipeline=", with: "").lowercased()
-            return NativeMarkdownPipeline(rawValue: value) ?? .regex
-        }
         if let pipelineArg = args.first(where: { $0.hasPrefix("--pipeline=") }) {
             let value = pipelineArg.replacingOccurrences(of: "--pipeline=", with: "").lowercased()
             return NativeMarkdownPipeline(rawValue: value) ?? .regex
@@ -121,6 +114,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if args.contains("--pipeline"), let v = parseValueAfterFlag("--pipeline", in: args)?.lowercased() {
             return NativeMarkdownPipeline(rawValue: v) ?? .regex
         }
+        if args.contains("--ast") { return .ast }
         return .regex
     }
     

@@ -287,14 +287,14 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // GUI screenshot test：確保能輸出 PNG
-    runner.run("mdviewer --native --screenshot 可輸出 PNG 並退出") {
+    runner.run("mdviewer --screenshot 可輸出 PNG 並退出") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let out = tmpDir.appendingPathComponent("mdviewer-screenshot-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: out) }
 
         let result = runProcess(
             "\(basePath)/mdviewer",
-            ["--native", "--screenshot", out.path, "--screenshot-delay", "0.2", "\(basePath)/Fixtures/test.md"],
+            ["--screenshot", out.path, "--screenshot-delay", "0.2", "\(basePath)/Fixtures/test.md"],
             timeoutSeconds: 8.0
         )
         guard !result.didTimeout, result.terminationStatus == 0, result.output.contains("SCREENSHOT_OK") else { return false }
@@ -345,7 +345,7 @@ func testCompilation(_ runner: TestRunner) {
         let fixture = "\(basePath)/Fixtures/table_width.md"
         let result = runProcess(
             "\(basePath)/mdviewer",
-            ["--no-activate", "--native", "--screenshot", out.path, "--screenshot-delay", "0.2", "--screenshot-scroll-to", "SCROLLTARGETTABLE", fixture],
+            ["--no-activate", "--screenshot", out.path, "--screenshot-delay", "0.2", "--screenshot-scroll-to", "SCROLLTARGETTABLE", fixture],
             timeoutSeconds: 10.0
         )
         guard !result.didTimeout, result.terminationStatus == 0, result.output.contains("SCREENSHOT_OK") else { return false }
@@ -361,7 +361,7 @@ func testCompilation(_ runner: TestRunner) {
     // CLI help：不應啟動 GUI，且應快速退出
     runner.run("mdviewer --help 可正常退出並顯示使用說明") {
         let result = runProcess("\(basePath)/mdviewer", ["--help"], timeoutSeconds: 2.0)
-        return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("Usage:") && result.output.contains("--native")
+        return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("Usage:") && result.output.contains("--pipeline")
     }
 
     // Native dump：驗證表格解析至少被觸發（避免「表格不出現」回歸）
@@ -409,8 +409,8 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // AST pipeline：至少應能啟動並在遇到 table/task/image 時自動 fallback（不應影響輸出）
-    runner.run("mdviewer --native-pipeline=ast --native-render-text 可正常輸出") {
-        let result = runProcess("\(basePath)/mdviewer", ["--native-pipeline=ast", "--native-render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
+    runner.run("mdviewer --pipeline=ast --native-render-text 可正常輸出") {
+        let result = runProcess("\(basePath)/mdviewer", ["--pipeline=ast", "--native-render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("表格範例") &&

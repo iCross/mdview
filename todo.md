@@ -14,9 +14,12 @@
 - [x] 支援 CLI 一次帶多個 `.md/.markdown`（多視窗）與 `Open…` 多選（2025-12-15）
 - [x] 加入主題（Theme）：`--theme=system|light|dark` + 選單切換（2025-12-15）
 - [x] 啟動後設定 Dock icon（避免非 bundle 顯示預設 `exec` icon）（2025-12-15）
-- [ ] 整理 legacy flags 命名（native/webkit 遺留）：保留相容但讓介面更直覺
-- [ ] 若新增/調整 CLI flags：同步更新 `Sources/main.swift` 的 `--help` 與 `Tests/test_runner.swift` 覆蓋。
-- [ ] 若改動排版（quote/table/code block）：至少用 `--native-render-text` 與 `--screenshot-scroll-to` 補一個回歸測試。
+
+（目前沒有待辦項目）
+
+## 維護提醒（不是 TODO）
+- 若新增/調整 CLI flags：同步更新 `Sources/main.swift` 的 `--help` 與 `Tests/test_runner.swift` 覆蓋
+- 若改動排版（quote/table/code block）：至少用 `--native-render-text` 與 `--screenshot-scroll-to` 補一個回歸測試
 
 ## 快速指令
 ```bash

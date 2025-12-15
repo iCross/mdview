@@ -23,7 +23,7 @@
 
 ### 2) 目前 CLI 與 renderer 狀態
 - 專案已是 **Native-only**（WebKit 已移除）。
-- CLI 仍保留 `--native` / `--native-*` 類型 flags；其中 `--native` 在「只有 native」的狀態下可視為相容用 no-op。
+- CLI 已改為 **不再提供 `--native`**；pipeline 以 `--pipeline` / `--ast` 表示（只保留一套介面）。
 
 ### 3) 補充：AppKit `openFile` 事件與 argv 互動
 - 在某些啟動路徑，AppKit 可能會把「非 option 的 argv」也當成 `application(_:openFile:)` 事件丟進來。\n  例：`--screenshot <out.png>` 的 `<out.png>` 會被誤當成要開的文件，導致 screenshot 測試不穩定。\n- 對策：`openFile` 僅接受 `.md/.markdown`；screenshot 模式也只挑第一個 Markdown 檔作為開啟目標。

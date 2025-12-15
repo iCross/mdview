@@ -14,15 +14,11 @@ func printHelp() {
 
     Options:
       --help, -h               顯示此說明並退出
-      --native                 （相容用 no-op）目前預設就是原生渲染器（NSTextView）
       --no-activate            不強制把 App 拉到前景（建議在 background job `&` 或某些自動化環境使用）
       --theme=system|light|dark
                               介面主題（預設 system；亦可用選單切換）
-      --pipeline=regex|ast     Markdown 管線（alias；等同 --native-pipeline）
-      --ast                    等同 --pipeline=ast（alias；也等同 --native-ast）
-      --native-pipeline=regex|ast
-                              指定 Native Markdown 管線（預設 regex；ast 會在遇到 table/task/image 時 fallback）
-      --native-ast             等同 --native-pipeline=ast
+      --pipeline=regex|ast     Markdown 管線（預設 regex；ast 會在遇到 table/task/image 時 fallback）
+      --ast                    等同 --pipeline=ast
       --smoke-test             GUI smoke test（建立視窗後自動退出）
       --screenshot <out.png>   啟動 GUI、渲染後截圖輸出 PNG，然後自動退出
       --screenshot=<out.png>   同上（等號形式）
@@ -125,11 +121,6 @@ func makeDefaultAppIcon(size: CGFloat) -> NSImage {
 }
 
 func parseNativePipeline(in args: [String]) -> NativeMarkdownPipeline {
-    if args.contains("--native-ast") || args.contains("--ast") { return .ast }
-    if let pipelineArg = args.first(where: { $0.hasPrefix("--native-pipeline=") }) {
-        let value = pipelineArg.replacingOccurrences(of: "--native-pipeline=", with: "").lowercased()
-        return NativeMarkdownPipeline(rawValue: value) ?? .regex
-    }
     if let pipelineArg = args.first(where: { $0.hasPrefix("--pipeline=") }) {
         let value = pipelineArg.replacingOccurrences(of: "--pipeline=", with: "").lowercased()
         return NativeMarkdownPipeline(rawValue: value) ?? .regex
@@ -137,6 +128,7 @@ func parseNativePipeline(in args: [String]) -> NativeMarkdownPipeline {
     if args.contains("--pipeline"), let v = parseValueAfterFlag("--pipeline", in: args)?.lowercased() {
         return NativeMarkdownPipeline(rawValue: v) ?? .regex
     }
+    if args.contains("--ast") { return .ast }
     return .regex
 }
 
