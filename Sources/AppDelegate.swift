@@ -4,24 +4,14 @@ import AppKit
 import Foundation
 import Darwin
 
-private enum RendererMode: String {
-    case webKit = "webkit"
-    case native = "native"
-}
-
 class AppDelegate: NSObject, NSApplicationDelegate {
     
     // MARK: - Properties
     
-    var window: NSWindow!
-    var markdownView: MarkdownView!
-    var nativeMarkdownView: NativeMarkdownView!
-    var rendererView: (NSView & MarkdownRenderable)?
-    private var rendererMode: RendererMode = .webKit
     var menuBuilder: MenuBuilder!
-    var fileHandler: FileHandler = FileHandler()  // 立即初始化
-    var currentFilePath: String?
-    var pendingFilePath: String?  // 儲存啟動前收到的檔案路徑
+    
+    private var windowControllers: [MarkdownWindowController] = []
+    private var pendingFilePaths: [String] = []  // 儲存啟動前收到的檔案路徑（可能多個）
     
     private var isSmokeTestMode: Bool {
         CommandLine.arguments.contains("--smoke-test")
@@ -111,31 +101,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private var didBootstrap: Bool = false
-    
-    private var preferredRendererMode: RendererMode {
-        // 支援：
-        // - --native / --webkit
-        // - --renderer=native / --renderer=webkit
-        let args = CommandLine.arguments
-        if args.contains("--native") { return .native }
-        if args.contains("--webkit") { return .webKit }
-        
-        if let rendererArg = args.first(where: { $0.hasPrefix("--renderer=") }) {
-            let value = rendererArg.replacingOccurrences(of: "--renderer=", with: "").lowercased()
-            return RendererMode(rawValue: value) ?? .webKit
-        }
-        return .webKit
-    }
 
     private var preferredNativePipeline: NativeMarkdownPipeline {
         // 支援：
         // - --native-pipeline=regex|ast
         // - --native-ast（等同 ast）
+        // - --pipeline=regex|ast（alias）
+        // - --ast（alias）
         let args = CommandLine.arguments
-        if args.contains("--native-ast") { return .ast }
+        if args.contains("--native-ast") || args.contains("--ast") { return .ast }
         if let pipelineArg = args.first(where: { $0.hasPrefix("--native-pipeline=") }) {
             let value = pipelineArg.replacingOccurrences(of: "--native-pipeline=", with: "").lowercased()
             return NativeMarkdownPipeline(rawValue: value) ?? .regex
+        }
+        if let pipelineArg = args.first(where: { $0.hasPrefix("--pipeline=") }) {
+            let value = pipelineArg.replacingOccurrences(of: "--pipeline=", with: "").lowercased()
+            return NativeMarkdownPipeline(rawValue: value) ?? .regex
+        }
+        if args.contains("--pipeline"), let v = parseValueAfterFlag("--pipeline", in: args)?.lowercased() {
+            return NativeMarkdownPipeline(rawValue: v) ?? .regex
         }
         return .regex
     }
@@ -156,63 +140,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 再保險一次：確保是一般 GUI app（非 bundle 從 Terminal 啟動時特別重要）
         NSApp.setActivationPolicy(.regular)
 
-        // 先確保「視窗一定會出現」：先建窗、先顯示，再初始化 WebKit（避免 WebKit 初始化卡住時整個 GUI 都不見）
-        setupWindow()
-        showWindowNow(activate: !isAutomationMode)
-
-        // CLI smoke test：不初始化 WebKit，單純驗證「能顯示 GUI + 正常退出」
+        // CLI smoke test：不初始化 renderer，單純驗證「能顯示 GUI + 正常退出」
         if isSmokeTestMode {
             // 這裡不要依賴 timer（在某些自動化/無前景情境 timer 可能不觸發，會導致測試卡住）
-            let ok = (window != nil) && window.isVisible && (NSApp.activationPolicy() == .regular)
+            let w = makeSmokeTestWindow()
+            w.makeKeyAndOrderFront(nil)
+            let ok = w.isVisible && (NSApp.activationPolicy() == .regular)
             print(ok ? "SMOKE_OK" : "SMOKE_FAIL")
             fflush(stdout)
             Darwin.exit(ok ? 0 : 1)
         }
 
-        // 其餘初始化放到下一個 tick，讓 AppKit event loop 穩定後再碰 WebKit
+        // 其餘初始化放到下一個 tick，讓 AppKit event loop 穩定後再碰 renderer
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.setupMarkdownView()
             self.setupMenu()
-            self.setupFileHandler()
-            self.processCommandLineArguments()
+            self.processPendingAndCommandLineFiles()
 
             // GUI 截圖模式：渲染後自動輸出 PNG 並退出（供測試/agent 使用）
-            if let outPath = self.screenshotOutputPath {
-                self.scheduleScreenshotAndExit(outputPath: outPath, delaySeconds: self.screenshotDelaySeconds)
+            if let outPath = self.screenshotOutputPath, let controller = self.windowControllers.first {
+                self.scheduleScreenshotAndExit(controller: controller, outputPath: outPath, delaySeconds: self.screenshotDelaySeconds)
             }
         }
     }
     
-    private func showWindowNow(activate: Bool) {
-        // 若 contentView 尚未建立，補一個避免後續 force unwrap
-        if window.contentView == nil {
-            let layoutSize = window.contentLayoutRect.size
-            let fallbackSize = window.contentRect(forFrameRect: window.frame).size
-            let size = (layoutSize.width > 0 && layoutSize.height > 0) ? layoutSize : fallbackSize
-            window.contentView = NSView(frame: NSRect(origin: .zero, size: size))
-        }
-        
-        // 放一個簡單的 placeholder，確保視窗一出來就有內容
-        if let contentView = window.contentView, contentView.subviews.isEmpty {
-            let label = NSTextField(labelWithString: "Loading…")
-            label.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
-            label.textColor = .secondaryLabelColor
-            label.sizeToFit()
-            label.translatesAutoresizingMaskIntoConstraints = false
-            contentView.addSubview(label)
-            NSLayoutConstraint.activate([
-                label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-                label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
-            ])
-        }
-        
-        window.makeKeyAndOrderFront(nil)
-        if activate && shouldActivateAppInThisSession() {
-            NSApp.activate(ignoringOtherApps: true)
-        }
-    }
-
     private func shouldActivateAppInThisSession() -> Bool {
         // 在某些環境（例如被當成 background job `&` 啟動，或在無互動 TTY 的子行程中）
         // 強制 activate 可能會被系統拒絕，甚至直接 SIGKILL。
@@ -229,173 +180,172 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return fg == getpgrp()
     }
     
+    // MARK: - Theme
+    
+    private enum ThemePreference: String {
+        case system
+        case light
+        case dark
+    }
+    
+    private func currentThemePreference() -> ThemePreference {
+        // 若沒有強制 appearance，就視為 system
+        guard let appearance = NSApp.appearance else { return .system }
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return .dark
+        } else {
+            return .light
+        }
+    }
+    
+    private func applyTheme(_ pref: ThemePreference) {
+        switch pref {
+        case .system:
+            NSApp.appearance = nil
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+        
+        // Highlightr theme 會在 render 當下依 effectiveAppearance 選擇，因此需要 rerender 才能切換。
+        for c in windowControllers {
+            c.rerender()
+        }
+    }
+    
+    @objc func setThemeSystem() { applyTheme(.system) }
+    @objc func setThemeLight() { applyTheme(.light) }
+    @objc func setThemeDark() { applyTheme(.dark) }
+    
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
     }
     
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-        // 如果視窗尚未準備好，先儲存路徑
-        if window == nil || rendererView == nil {
-            pendingFilePath = filename
+        // AppKit 可能會把某些「非 option 的 argv」也當成 openFile 事件丟進來；
+        // 這裡只接受 Markdown，避免例如 `--screenshot <out.png>` 的 out path 被誤當成要開的文件。
+        let lower = filename.lowercased()
+        let isMarkdown = lower.hasSuffix(".md") || lower.hasSuffix(".markdown")
+        if !isMarkdown { return false }
+
+        // 可能一次收到多個 openFile（例如 Finder 選多檔），因此用 array。
+        if !didBootstrap || windowControllers.isEmpty {
+            pendingFilePaths.append(filename)
         } else {
-            loadMarkdownFile(path: filename)
+            openNewWindow(path: filename, makeKey: true)
         }
         return true
     }
     
     // MARK: - Setup Methods
     
-    private func setupWindow() {
-        // 以螢幕可用區域（排除 Dock/Menu bar）計算「舒服的」初始 content size，
-        // 並加入上下限，避免太大或太小。
-        let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
-        let targetWidth: CGFloat = min(visibleFrame.width, min(1200, max(900, visibleFrame.width * 0.8)))
-        // 高度偏向更「高」一些：預設用可用螢幕高度的 95%，但永遠不超過 visibleFrame
-        //（避免每台螢幕不同時出現超出可用範圍）
-        let targetHeight: CGFloat = min(visibleFrame.height, max(700, visibleFrame.height * 0.95))
-        
-        // 注意：contentRect 是「內容區」大小；之後用 center() 置中，避免踩到 title bar/frame 差異。
-        let windowRect = NSRect(x: 0, y: 0, width: targetWidth, height: targetHeight)
-        
-        window = NSWindow(
-            contentRect: windowRect,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        
-        window.title = "Markdown Viewer"
-        // 避免視窗被縮到過小（閱讀下限）；小螢幕則依 visibleFrame 動態縮放。
-        let minWidth = min(700, visibleFrame.width * 0.6)
-        let minHeight = min(500, visibleFrame.height * 0.6)
-        window.minSize = NSSize(width: max(400, minWidth), height: max(300, minHeight))
-        window.isReleasedWhenClosed = false
-
-        // 讓 macOS 記住使用者上次調整的視窗大小/位置（若有記錄，會自動恢復）
-        window.setFrameAutosaveName("MainWindow")
-        // 若曾 autosave 過，優先用上次的 frame；否則使用本次計算出的初始大小並置中
-        let didRestoreFrame = window.setFrameUsingName("MainWindow")
-        if didRestoreFrame {
-            // 避免跨螢幕/解析度切換後，restore 的 frame 超出當前螢幕可用範圍
-            let constrained = window.constrainFrameRect(window.frame, to: NSScreen.main)
-            window.setFrame(constrained, display: false)
-        } else {
-            window.center()
-        }
-        
-        // 設定視窗代理以支援拖放
-        window.registerForDraggedTypes([.fileURL])
-    }
-    
-    private func setupMarkdownView() {
-        rendererMode = preferredRendererMode
-        setRenderer(rendererMode)
-    }
-    
-    private func setRenderer(_ mode: RendererMode) {
-        rendererMode = mode
-        
-        guard let contentView = window.contentView else { return }
-        
-        // 清掉 placeholder / 舊 renderer
-        contentView.subviews.forEach { $0.removeFromSuperview() }
-        
-        let view: (NSView & MarkdownRenderable)
-        switch mode {
-        case .webKit:
-            if markdownView == nil {
-                markdownView = MarkdownView(frame: contentView.bounds)
-                markdownView.autoresizingMask = [.width, .height]
-            } else {
-                markdownView.frame = contentView.bounds
-            }
-            view = markdownView
-        case .native:
-            if nativeMarkdownView == nil {
-                nativeMarkdownView = NativeMarkdownView(frame: contentView.bounds)
-                nativeMarkdownView.autoresizingMask = [.width, .height]
-            } else {
-                nativeMarkdownView.frame = contentView.bounds
-            }
-            nativeMarkdownView.setPipeline(preferredNativePipeline)
-            view = nativeMarkdownView
-        }
-        
-        rendererView = view
-        view.dropDelegate = self
-        contentView.addSubview(view)
-        
-        // 重新顯示目前內容（或歡迎頁）
-        if let path = currentFilePath, let content = fileHandler.readFile(at: path) {
-            view.setDocumentURL(URL(fileURLWithPath: path))
-            view.renderMarkdown(content)
-        } else {
-            view.setDocumentURL(nil)
-            view.loadWelcomePage()
-        }
-    }
-    
     private func setupMenu() {
         menuBuilder = MenuBuilder(appDelegate: self)
         NSApp.mainMenu = menuBuilder.buildMainMenu()
     }
     
-    private func setupFileHandler() {
-        // fileHandler 已在屬性宣告時初始化
-        fileHandler.delegate = self
-        
-        // 處理啟動前收到的檔案
-        if let path = pendingFilePath {
-            pendingFilePath = nil
-            loadMarkdownFile(path: path)
-        }
+    private func makeSmokeTestWindow() -> NSWindow {
+        let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 900, height: 700)
+        let windowRect = NSRect(x: 0, y: 0, width: min(900, visibleFrame.width), height: min(700, visibleFrame.height))
+        let w = NSWindow(
+            contentRect: windowRect,
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        w.title = "Markdown Viewer"
+        w.center()
+        w.contentView = NSView(frame: windowRect)
+        return w
     }
     
-    private func processCommandLineArguments() {
-        // 若 AppKit 已透過 openFile（例如 double click 或某些啟動時序）交付檔案，
-        // 就不要再重複用 command line 再載入一次，避免監控/渲染被重設兩次。
-        if currentFilePath != nil { return }
-
-        // 取第一個「看起來是 Markdown 檔」的參數做為檔案路徑
-        // 注意：我們也支援像 --screenshot <out.png> 這種「有 value 的 flag」，
-        // 因此不能再用「第一個非 option」的策略，否則會誤把 out.png 當成要開的檔案。
-        let args = CommandLine.arguments.dropFirst()
-        if let filePath = args.first(where: { arg in
-            if arg.hasPrefix("-") { return false }
+    private func activeWindowController() -> MarkdownWindowController? {
+        if let key = NSApp.keyWindow {
+            return windowControllers.first(where: { $0.window === key }) ?? windowControllers.first
+        }
+        return windowControllers.first
+    }
+    
+    private func openNewWindow(path: String?, makeKey: Bool) {
+        let controller = MarkdownWindowController(
+            initialFilePath: path,
+            preferredNativePipeline: preferredNativePipeline
+        )
+        controller.onClose = { [weak self] c in
+            guard let self else { return }
+            self.windowControllers.removeAll(where: { $0 === c })
+        }
+        windowControllers.append(controller)
+        
+        let shouldActivate = (!isAutomationMode) && shouldActivateAppInThisSession()
+        controller.show(activate: makeKey && shouldActivate)
+    }
+    
+    private func processPendingAndCommandLineFiles() {
+        // screenshot 模式：只開第一個檔案，避免多視窗干擾截圖目標
+        let isScreenshot = (screenshotOutputPath != nil)
+        
+        // 先處理 AppKit openFile 帶進來的檔案（可能多個）
+        var toOpen: [String] = []
+        if !pendingFilePaths.isEmpty {
+            toOpen.append(contentsOf: pendingFilePaths)
+            pendingFilePaths.removeAll(keepingCapacity: true)
+        }
+        
+        // 再處理 CLI 參數帶的檔案（可能多個）
+        let cli = CommandLine.arguments.dropFirst()
+        let cliFiles = cli.compactMap { arg -> String? in
+            if arg.hasPrefix("-") { return nil }
             let lower = arg.lowercased()
-            return lower.hasSuffix(".md") || lower.hasSuffix(".markdown")
-        }) {
-            loadMarkdownFile(path: filePath)
+            return (lower.hasSuffix(".md") || lower.hasSuffix(".markdown")) ? String(arg) : nil
+        }
+        toOpen.append(contentsOf: cliFiles)
+        
+        // 去重（避免同一路徑在 openFile + CLI 都出現）
+        var seen = Set<String>()
+        toOpen = toOpen.filter { p in
+            let abs = FileHandler().resolveAbsolutePath(p)
+            if seen.contains(abs) { return false }
+            seen.insert(abs)
+            return true
+        }
+        
+        if isScreenshot {
+            // 僅挑第一個 Markdown 檔；若沒有就顯示 welcome page 仍可截圖（但通常測試會帶 md）
+            if let firstMarkdown = toOpen.first(where: { p in
+                let lower = p.lowercased()
+                return lower.hasSuffix(".md") || lower.hasSuffix(".markdown")
+            }) {
+                openNewWindow(path: firstMarkdown, makeKey: true)
+            } else {
+                openNewWindow(path: nil, makeKey: true)
+            }
+            return
+        }
+        
+        if toOpen.isEmpty {
+            openNewWindow(path: nil, makeKey: true)
+        } else {
+            for (idx, p) in toOpen.enumerated() {
+                openNewWindow(path: p, makeKey: idx == 0)
+            }
         }
     }
     
     // MARK: - Public Methods
     
     @objc func loadMarkdownFile(path: String) {
-        let absolutePath: String
-        if path.hasPrefix("/") {
-            absolutePath = path
+        // 為了相容舊路徑：預設載入到目前 key window；若沒有，就開新視窗。
+        if let c = activeWindowController() {
+            c.loadMarkdownFile(path: path)
         } else {
-            absolutePath = FileManager.default.currentDirectoryPath + "/" + path
+            openNewWindow(path: path, makeKey: true)
         }
-        
-        guard let content = fileHandler.readFile(at: absolutePath) else {
-            showError("無法讀取檔案: \(absolutePath)")
-            return
-        }
-        
-        currentFilePath = absolutePath
-        window.title = "Markdown Viewer - \((absolutePath as NSString).lastPathComponent)"
-        rendererView?.setDocumentURL(URL(fileURLWithPath: absolutePath))
-        rendererView?.renderMarkdown(content)
-        
-        // 開始監控檔案變更
-        fileHandler.startWatching(path: absolutePath)
     }
     
     @objc func reloadCurrentFile() {
-        guard let path = currentFilePath else { return }
-        loadMarkdownFile(path: path)
+        activeWindowController()?.reloadCurrentFile()
     }
     
     @objc func openFile() {
@@ -405,33 +355,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             panel.allowedFileTypes = ["md", "markdown"]
         }
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         
         panel.begin { [weak self] response in
-            if response == .OK, let url = panel.url {
-                self?.loadMarkdownFile(path: url.path)
+            guard let self else { return }
+            if response == .OK {
+                let urls = panel.urls
+                for (idx, url) in urls.enumerated() {
+                    self.openNewWindow(path: url.path, makeKey: idx == 0)
+                }
             }
         }
-    }
-    
-    private func showError(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = "錯誤"
-        alert.informativeText = message
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "確定")
-        alert.runModal()
     }
 
     // MARK: - Screenshot (automated GUI verification)
 
-    private func scheduleScreenshotAndExit(outputPath: String, delaySeconds: TimeInterval) {
+    private func scheduleScreenshotAndExit(controller: MarkdownWindowController, outputPath: String, delaySeconds: TimeInterval) {
         // 避免 delay 為負數導致不可預期
         let delay = max(0.0, delaySeconds)
         let url = URL(fileURLWithPath: outputPath)
 
-        // Watchdog：避免在自動化環境卡死（例如某些 AppKit/WKWebView 時序問題）
+        // Watchdog：避免在自動化環境卡死（例如某些 AppKit 時序問題）
         let watchdog = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
         watchdog.schedule(deadline: .now() + 12.0)
         watchdog.setEventHandler {
@@ -445,69 +390,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { Darwin.exit(1) }
 
             // 確保至少跑過一次 layout/display
-            self.window.displayIfNeeded()
-            self.window.contentView?.layoutSubtreeIfNeeded()
-            self.window.contentView?.displayIfNeeded()
+            let window = controller.window
+            window.displayIfNeeded()
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.contentView?.displayIfNeeded()
 
-            // WebKit：用 takeSnapshot（更可靠）
-            if self.rendererMode == .webKit, let mv = self.markdownView {
-                let doSnapshot: () -> Void = {
-                    mv.captureSnapshotPNG(to: url, fullPage: self.screenshotIsFull) { ok in
-                        watchdog.cancel()
-                        print(ok ? "SCREENSHOT_OK \(outputPath)" : "SCREENSHOT_FAIL \(outputPath)")
-                        fflush(stdout)
-                        Darwin.exit(ok ? 0 : 1)
-                    }
-                }
+            let native = controller.rendererView as? NativeMarkdownView
 
-                if let t = self.screenshotScrollToText {
-                    mv.scrollToFirstOccurrence(of: t) { found in
-                        if !found {
-                            watchdog.cancel()
-                            print("SCREENSHOT_SCROLL_TO_NOT_FOUND \(t) \(outputPath)")
-                            fflush(stdout)
-                            Darwin.exit(1)
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            doSnapshot()
-                        }
-                    }
-                    return
-                }
-                if let y = self.screenshotScrollY {
-                    mv.scrollTo(y: y) {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            doSnapshot()
-                        }
-                    }
-                    return
-                }
-
-                doSnapshot()
-                return
-            }
-
-            // Native（或 fallback）：cacheDisplay 成 PNG（同步、無需螢幕錄製權限）
-            if let t = self.screenshotScrollToText, self.rendererMode == .native {
-                let found = self.nativeMarkdownView?.scrollToFirstOccurrence(of: t) ?? false
+            // Native：cacheDisplay 成 PNG（同步、無需螢幕錄製權限）
+            if let t = self.screenshotScrollToText {
+                let found = native?.scrollToFirstOccurrence(of: t) ?? false
                 if !found {
                     watchdog.cancel()
                     print("SCREENSHOT_SCROLL_TO_NOT_FOUND \(t) \(outputPath)")
                     fflush(stdout)
                     Darwin.exit(1)
                 }
-                self.window.displayIfNeeded()
-                self.window.contentView?.layoutSubtreeIfNeeded()
-                self.window.contentView?.displayIfNeeded()
-            } else if let y = self.screenshotScrollY, self.rendererMode == .native {
-                self.nativeMarkdownView?.scrollTo(y: y)
-                self.window.displayIfNeeded()
-                self.window.contentView?.layoutSubtreeIfNeeded()
-                self.window.contentView?.displayIfNeeded()
+                window.displayIfNeeded()
+                window.contentView?.layoutSubtreeIfNeeded()
+                window.contentView?.displayIfNeeded()
+            } else if let y = self.screenshotScrollY {
+                native?.scrollTo(y: y)
+                window.displayIfNeeded()
+                window.contentView?.layoutSubtreeIfNeeded()
+                window.contentView?.displayIfNeeded()
             }
 
             let ok: Bool
-            if self.screenshotIsFull, self.rendererMode == .native, let native = self.nativeMarkdownView {
+            if self.screenshotIsFull, let native {
                 let fullView = native.viewForFullScreenshot()
                 let bounds = fullView.bounds
                 let maxHeight: CGFloat = 12_000
@@ -518,7 +428,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     ok = self.captureViewPNG(fullView, bounds: bounds, to: url)
                 }
             } else {
-                ok = self.captureContentViewPNG(to: url)
+                ok = self.captureContentViewPNG(window: window, to: url)
             }
 
             watchdog.cancel()
@@ -528,7 +438,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func captureContentViewPNG(to url: URL) -> Bool {
+    private func captureContentViewPNG(window: NSWindow, to url: URL) -> Bool {
         guard let contentView = window.contentView else { return false }
 
         return captureViewPNG(contentView, bounds: contentView.bounds, to: url)
@@ -561,27 +471,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - View Menu Actions
     
     @objc func zoomIn() {
-        rendererView?.zoomIn()
+        activeWindowController()?.zoomIn()
     }
     
     @objc func zoomOut() {
-        rendererView?.zoomOut()
+        activeWindowController()?.zoomOut()
     }
     
     @objc func resetZoom() {
-        rendererView?.resetZoom()
+        activeWindowController()?.resetZoom()
     }
     
     // MARK: - Renderer Actions
-    
-    @objc func useWebKitRenderer() {
-        setRenderer(.webKit)
-    }
-    
-    @objc func useNativeRenderer() {
-        setRenderer(.native)
-    }
-    
+
     // MARK: - Help Menu Actions
     
     @objc func showHelp() {
@@ -615,35 +517,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// MARK: - MarkdownDropDelegate
-
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        switch menuItem.action {
-        case #selector(useWebKitRenderer):
-            menuItem.state = (rendererMode == .webKit) ? .on : .off
-            return true
-        case #selector(useNativeRenderer):
-            menuItem.state = (rendererMode == .native) ? .on : .off
-            return true
-        default:
-            return true
+        // Theme radio-like state
+        if menuItem.action == #selector(setThemeSystem) {
+            menuItem.state = (currentThemePreference() == .system) ? .on : .off
+        } else if menuItem.action == #selector(setThemeLight) {
+            menuItem.state = (currentThemePreference() == .light) ? .on : .off
+        } else if menuItem.action == #selector(setThemeDark) {
+            menuItem.state = (currentThemePreference() == .dark) ? .on : .off
         }
-    }
-}
-
-extension AppDelegate: MarkdownDropDelegate {
-    func markdownView(_ view: NSView, didReceiveDroppedFile path: String) {
-        loadMarkdownFile(path: path)
-    }
-}
-
-// MARK: - FileHandlerDelegate
-
-extension AppDelegate: FileHandlerDelegate {
-    func fileDidChange(at path: String) {
-        DispatchQueue.main.async { [weak self] in
-            self?.reloadCurrentFile()
-        }
+        return true
     }
 }

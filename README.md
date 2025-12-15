@@ -1,93 +1,68 @@
-# markdown_swift（`mdviewer`）— LLM 專案入口
+# mdview（`mdviewer`）— LLM 專案入口
 
-## 目標
-macOS Markdown Reader（AppKit）。支援兩種渲染器：
-- **WebKit（deprecated）**：`WKWebView`（HTML/JS；marked.js / highlight.js 走 CDN）。仍可用但不建議，後續預計移除；建議改用 `--native`。
-- **Native**：`NSTextView`（TextKit；支援 `regex` 或 `swift-markdown` AST 管線；code block 主要用 Highlightr）
+## 目的
+macOS Markdown Reader（AppKit）。**只讀**：讀取本機 `.md`/`.markdown`，渲染到畫面，支援拖放與檔案變更自動 reload。
 
 ## 最常用指令
 ```bash
 make debug
 make test
 make smoke
-./mdviewer test.md
+
+./mdviewer Fixtures/test.md
+./mdviewer Fixtures/test.md Fixtures/table_width.md
+./mdviewer --theme=dark Fixtures/test.md
 ./mdviewer --help
 ```
 
-## CLI（以程式碼為準：`Sources/main.swift`）
-- **Renderer**：`--webkit`（deprecated；目前仍可用且可能仍為預設）、`--native`、`--renderer=webkit|native`
+## CLI（以 `Sources/main.swift` 為準）
+- **前景/背景啟動**：`--no-activate`（在 background job `&` / 子行程 / CI 內建議加，避免被系統終止）
+- **主題（Theme）**：`--theme=system|light|dark`（預設 system；也可用選單 `檢視 → 主題` 切換）
 - **Native pipeline**：`--native-pipeline=regex|ast`、`--native-ast`
-- **前景/背景啟動注意事項**：
-  - 若你用 `&` 把它當 background job 跑，或在某些自動化/子行程環境，強制 `activate` 可能導致程式被系統直接終止；可加 `--no-activate` 避免。
-- **CI/除錯（不啟動 GUI）**：
-  - `--native-dump <file.md>`
-  - `--native-render-text <file.md>`
-  - `--native-skeleton-check`
-  - `--highlightr-check`
-- **GUI smoke**：`--smoke-test`（建立視窗後自動退出；用來避免 WebKit 初始化造成「視窗不出現」的誤判）
-- **GUI screenshot（給 LLM / CI 做視覺驗證）**：
-  - `--screenshot <out.png>`（啟動 GUI、渲染後輸出 PNG，然後自動退出）
-  - `--screenshot-delay <sec>`（等待秒數；預設 1.0，WebKit 建議 >= 1.0）
-  - `--no-activate`（避免在 background job/子行程環境強制拉前景）
+- **GUI smoke**：`--smoke-test`（建立視窗後自動退出）
+- **GUI screenshot（CI/LLM 視覺驗證）**：
+  - `--screenshot <out.png>`、`--screenshot-delay <sec>`（預設 1.0）
+  - `--screenshot-scroll-to <text>`（推薦：確保目標區塊一定在截圖範圍內）
+  - `--screenshot-scroll-y <number>`
+  - `--screenshot-full`（有高度上限；超出會失敗，請改用 scroll-to）
+- **不啟動 GUI 的測試/除錯**：
+  - `--native-dump <file.md>`（輸出可做字串比對的解析結果）
+  - `--native-render-text <file.md>`（輸出渲染後純文字；測 deterministic regression）
+  - `--native-skeleton-check`（寬度骨架回歸檢查：避免「每字換行」）
+  - `--highlightr-check`（驗證 Highlightr / JSCore / resources 可用）
 
-## GUI 截圖（給 LLM / CI）
-- **用途**：把 GUI 渲染結果轉成 PNG，方便在 CI/agent 端檢查 table / quote / code block 等視覺結果。
-- **輸出位置**：建議用 repo 內的 `.tmp/`（已在 `.gitignore` 忽略）；輸出資料夾會自動建立。
-- **截圖範圍（重要）**：
-  - 預設只截「可視範圍」（viewport）。若 table/quote 不在首屏，PNG 可能看不到問題區塊。
-  - 可用 `--screenshot-scroll-to` 先捲到指定文字，再截圖（最推薦、最穩定）。
-  - 或用 `--screenshot-full` 嘗試截整頁；但為避免超大 PNG/記憶體爆掉，會有高度上限（超過會失敗，請改用 scroll-to）。
-- **成功/失敗訊號**：
-  - 成功：stdout 會印 `SCREENSHOT_OK <path>`，exit code = 0
-  - 失敗：stdout 會印 `SCREENSHOT_FAIL <path>`，exit code = 1
-  - 超時：stdout 會印 `SCREENSHOT_TIMEOUT <path>`，exit code = 2
-  - scroll-to 找不到：stdout 會印 `SCREENSHOT_SCROLL_TO_NOT_FOUND <text> <path>`，exit code = 1
+## 測試輸出協定（供 automation/LLM 判斷）
+- **screenshot**：stdout 會印
+  - `SCREENSHOT_OK <path>`（exit 0）
+  - `SCREENSHOT_FAIL <path>`（exit 1）
+  - `SCREENSHOT_TIMEOUT <path>`（exit 2）
+  - `SCREENSHOT_SCROLL_TO_NOT_FOUND <text> <path>`（exit 1）
+- **smoke**：stdout 會印 `SMOKE_OK`（exit 0）或 `SMOKE_FAIL`（exit 1）
 
-範例（Native，建議）：
-```bash
-./mdviewer --no-activate --native --screenshot .tmp/mdviewer-native.png --screenshot-delay 0.2 test.md
-open .tmp/mdviewer-native.png
-```
+## 重要不變式（回歸最常發生在這）
+- **不能每字換行**：`NSTextContainer` 寬度必須跟著 `NSScrollView` 可視寬同步，且幾何變更時要強制 reflow（見 `NativeMarkdownView.syncTextContainerWidth()`）。
+- **所有自動化路徑要有 timeout**：測試與 screenshot/smoke 都必須能自行退出（Makefile / 測試 runner 已採 timeout + kill）。
 
-範例（捲到指定區塊再截圖；推薦用於 table/quote 視覺回歸）：
-```bash
-./mdviewer --no-activate --native --screenshot .tmp/mdviewer-table.png --screenshot-delay 0.2 --screenshot-scroll-to 表格範例 test.md
-open .tmp/mdviewer-table.png
-```
-
-範例（截整頁；可能因高度上限而失敗，建議優先用 scroll-to）：
-```bash
-./mdviewer --no-activate --native --screenshot .tmp/mdviewer-full.png --screenshot-delay 0.2 --screenshot-full test.md
-open .tmp/mdviewer-full.png
-```
-
-範例（WebKit，deprecated；通常需要更久的 delay）：
-```bash
-./mdviewer --no-activate --webkit --screenshot .tmp/mdviewer-webkit.png --screenshot-delay 1.0 test.md
-open .tmp/mdviewer-webkit.png
-```
-
-## 程式碼入口（找功能先看這些）
-- `Sources/main.swift`：CLI flags / debug-only 路徑 / App 啟動
-- `Sources/AppDelegate.swift`：視窗、渲染器切換、載檔、檔案監控、拖放
-- `Sources/MarkdownView.swift`：WebKit renderer
-- `Sources/NativeMarkdownView.swift`：Native renderer（width sync / reflow 關鍵也在這）
+## 程式碼入口（優先閱讀順序）
+- `Sources/main.swift`：CLI flags / 測試模式入口
+- `Sources/AppDelegate.swift`：視窗、載檔、檔案監控、screenshot/smoke 流程
+- `Sources/NativeMarkdownView.swift`：Native renderer（排版/寬度/截圖/scroll-to 關鍵）
 - `Sources/ASTMarkdownRenderer.swift`：AST 管線（`swift-markdown`）
 - `Sources/FileHandler.swift`：讀檔 + 檔案變更監控
 - `Sources/MenuBuilder.swift`：選單/快捷鍵
 - `Tests/test_runner.swift`：測試入口
 
-## 不變式（回歸最常發生在這）
-- **Native 不能每字換行**：`NSTextContainer` 寬度要跟著 `NSScrollView` 可視寬同步，並在幾何變更時強制 reflow。
-- **所有 build/test/子行程必須有 timeout**：避免卡死（Makefile 已包 timeout；測試也應同樣保守）。
+## FAQ
+### 為什麼執行後會看到 `IMKCFRunLoopWakeUpReliable` / `mach port` 的 error log？
+這通常是 **macOS InputMethodKit / TextKit** 在初始化文字輸入子系統時輸出的系統 log（本專案內沒有印這段字串）。多數情況下 **不影響功能**，可以忽略。
 
-## 測試在「無法啟動子行程 GUI」環境的處理
-預設 `make test` 會把「mdviewer 子行程不可執行」視為失敗（避免掩蓋回歸）。
-若你在特殊環境（例如無 GUI session/平台限制）需要跳過這段，改用：
+若你需要讓自動化輸出更乾淨，可考慮：
+- 在測試/CI 僅看 `stdout`（把 `stderr` 分流/過濾特定字串）
+- 或改用 `.app bundle` 形式啟動（較符合 macOS 慣例，且也更容易有正式 Dock icon）
+
+## 在「無法啟動 GUI 子行程」環境
+預設 `make test` 會把「mdviewer 子行程不可執行」視為失敗（避免掩蓋回歸）。若你在特殊環境需要跳過，改用：
 
 ```bash
 MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1 make test
 ```
-
-## 其他文件（都以「給 LLM 用」為前提）
-- `todo.md`：僅保留仍未完成的 TODO 與關鍵決策/不變式

@@ -1,33 +1,29 @@
-# markdown_swift（macOS Markdown Reader）— TODO（給 LLM）
+# mdview（`mdviewer`）— TODO（進度追蹤，給 LLM）
 
-## 專案目標 / 範圍
-- **產品型態**：純 Reader（不提供編輯）
-- **輸入**：讀取本機 `.md`（支援拖放、檔案變更自動 reload）
-- **輸出**：渲染到畫面（支援縮放、深淺色跟隨系統）
+## 現況
+- **Renderer**：Native-only（`NSTextView`）
+- **輸入**：本機 `.md`/`.markdown`（支援拖放、檔案變更自動 reload）
+- **自動化**：支援 `--smoke-test`、`--screenshot*`、`--native-dump`、`--native-render-text`、`--native-skeleton-check`、`--highlightr-check`
 
-## 目前架構（只留關鍵）
-- **雙渲染路線**：
-  - **WebKit（deprecated）**：`WKWebView`（marked.js / highlight.js 走 CDN）。仍可用但不建議；後續預計移除。
-  - **Native**：`NSTextView`（自寫簡化 parser/regex 上色；支援 table / image / quote / fenced code block）
-- **CLI（測試/除錯要用）**：`--help`、`--native-dump`、`--native-render-text`、`--native-pipeline=regex|ast`（或 `--native-ast`）、`--smoke-test`、`--screenshot`、`--screenshot-full`、`--screenshot-scroll-to`、`--screenshot-scroll-y`、`--no-activate`
-- **不變式（避免回歸）**：
-  - Native code block / quote **不能每字換行**（`NSTextBlock.setContentWidth(100%, ...)` 等處理必須保留）
-  - `NSTextView` 寬度需跟著 scroll/視窗變化 **強制 reflow**（監聽 `NSClipView` bounds/frame 變更）
-  - 從 background job/子行程環境啟動時 **不要強制 activate**（必要時用 `--no-activate`；否則有機會被系統直接終止）
-  - 所有 build/test/子行程都要有 **timeout + kill**（避免卡死）
+## 不變式（避免回歸）
+- Native **不能每字換行**：text container 寬度必須跟著 scrollView 可視寬同步，且要強制 reflow。
+- background job/子行程環境 **不要強制 activate**：必要時用 `--no-activate`。
+- 所有 build/test/子行程都要有 **timeout + kill**。
 
-## 仍待處理（唯一保留 TODO）
-- [ ] **若未來決定完全移除 WebKit 路線**（已 deprecated）：更新 `Makefile` 的 `FRAMEWORKS` 與 `Sources` 清單、同步更新 `README.md` 的 renderer 說明與 CLI 描述，並刪除/移除 `Sources/MarkdownView.swift` 等相關 Swift 檔案的編譯引用（目前仍保留 WebKit）。
+## TODO
+- [x] 支援 CLI 一次帶多個 `.md/.markdown`（多視窗）與 `Open…` 多選（2025-12-15）
+- [x] 加入主題（Theme）：`--theme=system|light|dark` + 選單切換（2025-12-15）
+- [x] 啟動後設定 Dock icon（避免非 bundle 顯示預設 `exec` icon）（2025-12-15）
+- [ ] 整理 legacy flags 命名（native/webkit 遺留）：保留相容但讓介面更直覺
+- [ ] 若新增/調整 CLI flags：同步更新 `Sources/main.swift` 的 `--help` 與 `Tests/test_runner.swift` 覆蓋。
+- [ ] 若改動排版（quote/table/code block）：至少用 `--native-render-text` 與 `--screenshot-scroll-to` 補一個回歸測試。
 
-## 快速指令（只留最常用）
+## 快速指令
 ```bash
 make debug
 make test
-./mdviewer test.md
+./mdviewer Fixtures/test.md
 
-# GUI 視覺驗證（產出 PNG，供 LLM/CI 檢查）
-./mdviewer --no-activate --native --screenshot .tmp/mdviewer.png --screenshot-delay 0.2 test.md
-
-# 捲到指定區塊再截圖（避免 table/quote 不在首屏時截不到）
-./mdviewer --no-activate --native --screenshot .tmp/mdviewer-table.png --screenshot-delay 0.2 --screenshot-scroll-to 表格範例 test.md
+# 視覺驗證（PNG）
+./mdviewer --no-activate --screenshot .tmp/mdviewer.png --screenshot-delay 0.2 Fixtures/test.md
 ```

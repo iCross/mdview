@@ -4,12 +4,15 @@
 APP_NAME = mdviewer
 SOURCES = Sources/main.swift \
           Sources/AppDelegate.swift \
-          Sources/MarkdownView.swift \
+          Sources/MarkdownRenderable.swift \
+          Sources/MarkdownWindowController.swift \
           Sources/NativeMarkdownView.swift \
+          Sources/ASTMarkdownRenderer.swift \
+          Sources/IncrementalSyntaxHighlighter.swift \
           Sources/FileHandler.swift \
           Sources/MenuBuilder.swift
 
-FRAMEWORKS = -framework AppKit -framework WebKit
+FRAMEWORKS = -framework AppKit
 
 # 編譯旗標
 DEBUG_FLAGS = -g -Onone
@@ -40,14 +43,15 @@ release: $(SOURCES)
 # 清除編譯產物
 clean:
 	@echo "🧹 清除編譯產物..."
-	trash -F $(APP_NAME)
-	trash -F .build
+	@# 用 trash 移到 macOS Trash；路徑不存在時不要讓 make 失敗
+	@if [ -e "./$(APP_NAME)" ]; then trash "./$(APP_NAME)"; fi
+	@if [ -d ".build" ]; then trash ".build"; fi
 	@echo "✅ 清除完成"
 
 # 執行應用程式（使用測試檔案；互動式，預期會常駐）
 run: debug
 	@echo "▶️ 執行應用程式..."
-	@./$(APP_NAME) test.md
+	@./$(APP_NAME) Fixtures/test.md
 
 # 執行應用程式（無檔案；互動式，預期會常駐）
 run-empty: debug
@@ -57,7 +61,7 @@ run-empty: debug
 # 執行應用程式（CI/自動化用：加 timeout 避免卡住）
 run-ci: debug
 	@echo "▶️ 執行應用程式（CI timeout 30s）..."
-	@perl -e 'alarm shift; exec @ARGV' 30 ./$(APP_NAME) test.md
+	@perl -e 'alarm shift; exec @ARGV' 30 ./$(APP_NAME) Fixtures/test.md
 
 run-empty-ci: debug
 	@echo "▶️ 執行應用程式（無檔案；CI timeout 30s）..."

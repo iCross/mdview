@@ -109,8 +109,11 @@ func testFileSystem(_ runner: TestRunner) {
     let requiredFiles = [
         "Sources/main.swift",
         "Sources/AppDelegate.swift",
-        "Sources/MarkdownView.swift",
+        "Sources/MarkdownRenderable.swift",
+        "Sources/MarkdownWindowController.swift",
         "Sources/NativeMarkdownView.swift",
+        "Sources/ASTMarkdownRenderer.swift",
+        "Sources/IncrementalSyntaxHighlighter.swift",
         "Sources/FileHandler.swift",
         "Sources/MenuBuilder.swift"
     ]
@@ -126,9 +129,9 @@ func testFileSystem(_ runner: TestRunner) {
         fm.fileExists(atPath: "\(basePath)/mdviewer")
     }
     
-    // 測試 test.md 存在
-    runner.run("test.md 測試檔案存在") {
-        fm.fileExists(atPath: "\(basePath)/test.md")
+    // 測試 Fixtures/test.md 存在
+    runner.run("Fixtures/test.md 測試檔案存在") {
+        fm.fileExists(atPath: "\(basePath)/Fixtures/test.md")
     }
     
     // 測試 Makefile 存在
@@ -165,17 +168,26 @@ func testFileContents(_ runner: TestRunner) {
         }
         return content.contains("NSApplicationDelegate") &&
                content.contains("NSWindow") &&
-               content.contains("MarkdownView") &&
+               content.contains("NativeMarkdownView") &&
                content.contains("FileHandler") &&
                content.contains("MenuBuilder")
     }
-    
-    // 測試 MarkdownView.swift 內容
-    runner.run("MarkdownView.swift 包含 WKWebView") {
-        guard let content = try? String(contentsOfFile: "\(basePath)/Sources/MarkdownView.swift", encoding: .utf8) else {
-            return false
-        }
-        return content.contains("WKWebView") && content.contains("marked.js") && content.contains("highlight.js")
+
+    // WebKit 已移除：不應再有 MarkdownView.swift 或 import WebKit
+    runner.run("WebKit 相關檔案已移除") {
+        let fm = FileManager.default
+        let removedFile = !fm.fileExists(atPath: "\(basePath)/Sources/MarkdownView.swift")
+        let appDelegate = (try? String(contentsOfFile: "\(basePath)/Sources/AppDelegate.swift", encoding: .utf8)) ?? ""
+        let native = (try? String(contentsOfFile: "\(basePath)/Sources/NativeMarkdownView.swift", encoding: .utf8)) ?? ""
+        let menu = (try? String(contentsOfFile: "\(basePath)/Sources/MenuBuilder.swift", encoding: .utf8)) ?? ""
+        let main = (try? String(contentsOfFile: "\(basePath)/Sources/main.swift", encoding: .utf8)) ?? ""
+        let package = (try? String(contentsOfFile: "\(basePath)/Package.swift", encoding: .utf8)) ?? ""
+        return removedFile &&
+            !appDelegate.contains("WebKit") &&
+            !native.contains("WebKit") &&
+            !menu.contains("WebKit") &&
+            !main.contains("WebKit") &&
+            !package.contains("WebKit")
     }
     
     // 測試 NativeMarkdownView.swift 內容
@@ -202,9 +214,9 @@ func testFileContents(_ runner: TestRunner) {
         return content.contains("NSMenu") && content.contains("buildMainMenu")
     }
     
-    // 測試 test.md 是有效的 Markdown
-    runner.run("test.md 包含有效 Markdown 語法") {
-        guard let content = try? String(contentsOfFile: "\(basePath)/test.md", encoding: .utf8) else {
+    // 測試 Fixtures/test.md 是有效的 Markdown
+    runner.run("Fixtures/test.md 包含有效 Markdown 語法") {
+        guard let content = try? String(contentsOfFile: "\(basePath)/Fixtures/test.md", encoding: .utf8) else {
             return false
         }
         return content.contains("# ") &&  // 標題
@@ -234,10 +246,10 @@ func testCompilation(_ runner: TestRunner) {
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("AppKit")
     }
     
-    runner.run("mdviewer 連結 WebKit 框架") {
+    runner.run("mdviewer 不應連結 WebKit 框架") {
         let basePath = FileManager.default.currentDirectoryPath
         let result = runProcess("/usr/bin/otool", ["-L", "\(basePath)/mdviewer"], timeoutSeconds: 2.0)
-        return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("WebKit")
+        return !result.didTimeout && result.terminationStatus == 0 && !result.output.contains("WebKit")
     }
 
     // 在某些自動化環境中（例如無 GUI session/WindowServer 或平台限制），
@@ -274,7 +286,7 @@ func testCompilation(_ runner: TestRunner) {
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SMOKE_OK")
     }
 
-    // GUI screenshot test：確保能輸出 PNG（用 native renderer 避免 WebKit 非同步造成 flakiness）
+    // GUI screenshot test：確保能輸出 PNG
     runner.run("mdviewer --native --screenshot 可輸出 PNG 並退出") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let out = tmpDir.appendingPathComponent("mdviewer-screenshot-\(UUID().uuidString).png")
@@ -282,7 +294,7 @@ func testCompilation(_ runner: TestRunner) {
 
         let result = runProcess(
             "\(basePath)/mdviewer",
-            ["--native", "--screenshot", out.path, "--screenshot-delay", "0.2", "\(basePath)/test.md"],
+            ["--native", "--screenshot", out.path, "--screenshot-delay", "0.2", "\(basePath)/Fixtures/test.md"],
             timeoutSeconds: 8.0
         )
         guard !result.didTimeout, result.terminationStatus == 0, result.output.contains("SCREENSHOT_OK") else { return false }
@@ -353,8 +365,8 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // Native dump：驗證表格解析至少被觸發（避免「表格不出現」回歸）
-    runner.run("mdviewer --native-dump 可解析 test.md 的表格") {
-        let result = runProcess("\(basePath)/mdviewer", ["--native-dump", "\(basePath)/test.md"], timeoutSeconds: 2.0)
+    runner.run("mdviewer --native-dump 可解析 Fixtures/test.md 的表格") {
+        let result = runProcess("\(basePath)/mdviewer", ["--native-dump", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("[[TABLE]]") &&
@@ -386,10 +398,10 @@ func testCompilation(_ runner: TestRunner) {
     
     // Native render text：驗證 fenced code block 結束後，後續段落仍會被渲染（回歸：JS 區塊後面沒顯示）
     runner.run("mdviewer --native-render-text 不會吃掉 fenced code block 後的內容") {
-        let result = runProcess("\(basePath)/mdviewer", ["--native-render-text", "\(basePath)/test.md"], timeoutSeconds: 2.0)
+        let result = runProcess("\(basePath)/mdviewer", ["--native-render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         
-        // JavaScript code block 後面 test.md 會出現「表格範例」「引用區塊」「待辦清單」
+        // code block 後面 Fixtures/test.md 會出現「表格範例」「引用區塊」「待辦清單」
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("表格範例") &&
                output.contains("引用區塊") &&
@@ -398,7 +410,7 @@ func testCompilation(_ runner: TestRunner) {
 
     // AST pipeline：至少應能啟動並在遇到 table/task/image 時自動 fallback（不應影響輸出）
     runner.run("mdviewer --native-pipeline=ast --native-render-text 可正常輸出") {
-        let result = runProcess("\(basePath)/mdviewer", ["--native-pipeline=ast", "--native-render-text", "\(basePath)/test.md"], timeoutSeconds: 2.0)
+        let result = runProcess("\(basePath)/mdviewer", ["--native-pipeline=ast", "--native-render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("表格範例") &&
@@ -426,7 +438,7 @@ func testFileHandler(_ runner: TestRunner) {
     print(String(repeating: "-", count: 40))
     
     let basePath = FileManager.default.currentDirectoryPath
-    let testFilePath = "\(basePath)/test.md"
+    let testFilePath = "\(basePath)/Fixtures/test.md"
     
     // 模擬 FileHandler 的檔案讀取邏輯
     runner.run("讀取存在的檔案") {
@@ -496,49 +508,6 @@ func testFileHandler(_ runner: TestRunner) {
     }
 }
 
-// MARK: - Markdown 渲染測試
-
-func testMarkdownRendering(_ runner: TestRunner) {
-    print("\n📝 Markdown 渲染邏輯測試")
-    print(String(repeating: "-", count: 40))
-    
-    // 測試 JavaScript 字串轉義邏輯
-    runner.run("轉義反斜線") {
-        let input = "test\\path"
-        let escaped = input.replacingOccurrences(of: "\\", with: "\\\\")
-        return escaped == "test\\\\path"
-    }
-    
-    runner.run("轉義反引號") {
-        let input = "code `block`"
-        let escaped = input.replacingOccurrences(of: "`", with: "\\`")
-        return escaped == "code \\`block\\`"
-    }
-    
-    runner.run("轉義錢字號") {
-        let input = "price $100"
-        let escaped = input.replacingOccurrences(of: "$", with: "\\$")
-        return escaped == "price \\$100"
-    }
-    
-    runner.run("轉義換行符號") {
-        let input = "line1\nline2"
-        let escaped = input.replacingOccurrences(of: "\n", with: "\\n")
-        return escaped == "line1\\nline2"
-    }
-    
-    // 完整轉義測試
-    runner.run("完整 JavaScript 轉義") {
-        let input = "Test `code` with $var and\nnewline"
-        let escaped = input
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "`", with: "\\`")
-            .replacingOccurrences(of: "$", with: "\\$")
-            .replacingOccurrences(of: "\n", with: "\\n")
-        return escaped == "Test \\`code\\` with \\$var and\\nnewline"
-    }
-}
-
 // MARK: - Makefile 測試
 
 func testMakefile(_ runner: TestRunner) {
@@ -576,8 +545,8 @@ func testMakefile(_ runner: TestRunner) {
         makefileContent.contains("-framework AppKit")
     }
     
-    runner.run("Makefile 包含 WebKit 框架") {
-        makefileContent.contains("-framework WebKit")
+    runner.run("Makefile 不應包含 WebKit 框架") {
+        !makefileContent.contains("-framework WebKit")
     }
 }
 
@@ -596,7 +565,6 @@ testFileSystem(runner)
 testFileContents(runner)
 testCompilation(runner)
 testFileHandler(runner)
-testMarkdownRendering(runner)
 testMakefile(runner)
 
 runner.printSummary()

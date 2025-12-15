@@ -1,5 +1,5 @@
 // NativeMarkdownView.swift
-// macOS Markdown Viewer - 原生 NSTextView 渲染元件（不使用 WKWebView）
+// macOS Markdown Viewer - 原生 NSTextView 渲染元件
 
 import AppKit
 import Foundation
@@ -12,7 +12,7 @@ enum NativeMarkdownPipeline: String {
 }
 
 /// 使用 NSTextView 以 NSAttributedString 呈現 Markdown。
-/// 設計目標：較低常駐成本、快速啟動、無 WebKit/JS 依賴。
+/// 設計目標：較低常駐成本、快速啟動、無 HTML/JS 渲染依賴。
 final class NativeMarkdownView: NSView, MarkdownRenderable {
     
     // MARK: - Properties
@@ -240,6 +240,10 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     
     func resetZoom() {
         currentZoomLevel = 1.0
+        rerenderForZoomChange()
+    }
+
+    func rerender() {
         rerenderForZoomChange()
     }
     

@@ -216,23 +216,29 @@ class MenuBuilder {
         viewMenu.addItem(actualSizeItem)
         
         viewMenu.addItem(NSMenuItem.separator())
+
+        // 主題（Theme）
+        let themeItem = NSMenuItem(title: "主題", action: nil, keyEquivalent: "")
+        let themeMenu = NSMenu(title: "主題")
         
-        // 渲染器切換（WebKit / Native）
-        let webKitRendererItem = NSMenuItem(
-            title: "使用 WebKit 渲染器",
-            action: #selector(AppDelegate.useWebKitRenderer),
-            keyEquivalent: ""
-        )
-        webKitRendererItem.target = appDelegate
-        viewMenu.addItem(webKitRendererItem)
+        let themeSystem = NSMenuItem(title: "跟隨系統", action: #selector(AppDelegate.setThemeSystem), keyEquivalent: "")
+        themeSystem.target = appDelegate
+        themeMenu.addItem(themeSystem)
         
-        let nativeRendererItem = NSMenuItem(
-            title: "使用原生渲染器（NSTextView）",
-            action: #selector(AppDelegate.useNativeRenderer),
-            keyEquivalent: ""
-        )
-        nativeRendererItem.target = appDelegate
-        viewMenu.addItem(nativeRendererItem)
+        let themeLight = NSMenuItem(title: "淺色", action: #selector(AppDelegate.setThemeLight), keyEquivalent: "")
+        themeLight.target = appDelegate
+        themeMenu.addItem(themeLight)
+        
+        let themeDark = NSMenuItem(title: "深色", action: #selector(AppDelegate.setThemeDark), keyEquivalent: "")
+        themeDark.target = appDelegate
+        themeMenu.addItem(themeDark)
+        
+        themeItem.submenu = themeMenu
+        viewMenu.addItem(themeItem)
+        
+        viewMenu.addItem(NSMenuItem.separator())
+
+        // Native-only：不提供渲染器切換選單
         
         viewMenuItem.submenu = viewMenu
         return viewMenuItem
