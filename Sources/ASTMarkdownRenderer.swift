@@ -209,6 +209,18 @@ struct ASTMarkdownRenderer {
                 .foregroundColor: theme.textColor,
                 .paragraphStyle: p
             ]
+
+            // Mermaid：若啟用且 `mmdc` 可用，嘗試渲染成圖片；失敗則 fallback 顯示 source。
+            if let lang = codeBlock.language?.lowercased(), lang == "mermaid" {
+                if let attachment = MermaidRenderer.renderAttachmentIfPossible(code: codeBlock.code, theme: theme, maxWidth: nil) {
+                    let m = NSMutableAttributedString(attributedString: attachment)
+                    m.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: m.length))
+                    out.append(m)
+                    out.append(NSAttributedString(string: "\n", attributes: baseAttrs))
+                    out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
+                    return
+                }
+            }
             if let hl = Self.highlightr {
                 hl.theme.setCodeFont(theme.monoFont)
                 _ = hl.setTheme(to: (NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua) ? "paraiso-dark" : "paraiso-light")
@@ -246,31 +258,39 @@ struct ASTMarkdownRenderer {
         mutating func visitListItem(_ listItem: ListItem) {
             let prev = currentAttributes
 
-            let (prefix, headIndent): (String, CGFloat)
+            let (prefix, depth): (String, Int)
             if let ctx = listStack.last {
                 switch ctx {
-                case .unordered(let depth):
+                case .unordered(let d):
                     let bullets = ["•", "◦", "▪", "▫"]
-                    let bullet = bullets[depth % bullets.count]
+                    let bullet = bullets[d % bullets.count]
                     prefix = "\(bullet)"
-                    headIndent = 22 + CGFloat(depth) * 16
-                case .ordered(let depth, let start):
+                    depth = d
+                case .ordered(let d, let start):
                     let idx = start + listItem.indexInParent
                     prefix = "\(idx)."
-                    headIndent = 26 + CGFloat(depth) * 16
+                    depth = d
                 }
             } else {
                 prefix = "•"
-                headIndent = 22
+                depth = 0
             }
 
             let p = NSMutableParagraphStyle()
-            p.firstLineHeadIndent = 0
-            p.headIndent = headIndent
+            
+            // Notes.app 風格：符號/數字縮排 + 文字對齊（tab stop + hanging indent）
+            let depthIndent = CGFloat(depth) * 16
+            let bulletIndent: CGFloat = 14 + depthIndent
+            let prefixWidth = (prefix as NSString).size(withAttributes: [.font: theme.paragraphFont]).width
+            let minTextIndent: CGFloat = 32 + depthIndent
+            let textIndent = max(minTextIndent, bulletIndent + prefixWidth + 12)
+            
+            p.firstLineHeadIndent = bulletIndent
+            p.headIndent = textIndent
             p.tabStops = [
-                NSTextTab(textAlignment: .left, location: headIndent, options: [:])
+                NSTextTab(textAlignment: .left, location: textIndent, options: [:])
             ]
-            p.defaultTabInterval = headIndent
+            p.defaultTabInterval = textIndent
             p.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
             p.lineSpacing = theme.baseParagraphStyle.lineSpacing
             p.paragraphSpacing = 2

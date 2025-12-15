@@ -20,15 +20,16 @@ make smoke
 - **主題（Theme）**：`--theme=system|light|dark`（預設 system；也可用選單 `檢視 → 主題` 切換）
 - **Markdown pipeline**：`--pipeline=regex|ast`、`--ast`
 - **GUI smoke**：`--smoke-test`（建立視窗後自動退出）
+- **Mermaid（可選）**：`--mermaid`（需要系統有 `mmdc`；否則 fallback 顯示原始碼）
 - **GUI screenshot（CI/LLM 視覺驗證）**：
   - `--screenshot <out.png>`、`--screenshot-delay <sec>`（預設 1.0）
   - `--screenshot-scroll-to <text>`（推薦：確保目標區塊一定在截圖範圍內）
   - `--screenshot-scroll-y <number>`
   - `--screenshot-full`（有高度上限；超出會失敗，請改用 scroll-to）
 - **不啟動 GUI 的測試/除錯**：
-  - `--native-dump <file.md>`（輸出可做字串比對的解析結果）
-  - `--native-render-text <file.md>`（輸出渲染後純文字；測 deterministic regression）
-  - `--native-skeleton-check`（寬度骨架回歸檢查：避免「每字換行」）
+  - `--dump <file.md>`（輸出可做字串比對的解析結果）
+  - `--render-text <file.md>`（輸出渲染後純文字；測 deterministic regression）
+  - `--skeleton-check`（寬度骨架回歸檢查：避免「每字換行」）
   - `--highlightr-check`（驗證 Highlightr / JSCore / resources 可用）
 
 ## 測試輸出協定（供 automation/LLM 判斷）

@@ -41,3 +41,8 @@
 - Theme：切換後 code highlight 與背景/文字色系一致更新
 - Dock icon：顯示 mdview icon（非 exec）
 - `make test` 通過
+
+## 後續補充（2025-12-15）
+- 清單縮排改為更接近 macOS Notes：符號/數字也會跟著縮排，並用 tab stop + hanging indent 對齊文字。
+- `Fixtures/test.md` 擴充：加入 H1/H2/H3、圖片語法、bullet/ordered list、mermaid 範例。
+- Mermaid 支援：新增 `--mermaid`（需要系統有 `mmdc`；否則 fallback 顯示原始碼）。

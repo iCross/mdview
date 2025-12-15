@@ -8,6 +8,7 @@ SOURCES = Sources/main.swift \
           Sources/MarkdownWindowController.swift \
           Sources/NativeMarkdownView.swift \
           Sources/ASTMarkdownRenderer.swift \
+          Sources/MermaidRenderer.swift \
           Sources/IncrementalSyntaxHighlighter.swift \
           Sources/FileHandler.swift \
           Sources/MenuBuilder.swift

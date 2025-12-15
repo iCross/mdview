@@ -3,7 +3,7 @@
 ## 現況
 - **Renderer**：Native-only（`NSTextView`）
 - **輸入**：本機 `.md`/`.markdown`（支援拖放、檔案變更自動 reload）
-- **自動化**：支援 `--smoke-test`、`--screenshot*`、`--native-dump`、`--native-render-text`、`--native-skeleton-check`、`--highlightr-check`
+- **自動化**：支援 `--smoke-test`、`--screenshot*`、`--dump`、`--render-text`、`--skeleton-check`、`--highlightr-check`
 
 ## 不變式（避免回歸）
 - Native **不能每字換行**：text container 寬度必須跟著 scrollView 可視寬同步，且要強制 reflow。
@@ -19,7 +19,7 @@
 
 ## 維護提醒（不是 TODO）
 - 若新增/調整 CLI flags：同步更新 `Sources/main.swift` 的 `--help` 與 `Tests/test_runner.swift` 覆蓋
-- 若改動排版（quote/table/code block）：至少用 `--native-render-text` 與 `--screenshot-scroll-to` 補一個回歸測試
+- 若改動排版（quote/table/code block）：至少用 `--render-text` 與 `--screenshot-scroll-to` 補一個回歸測試
 
 ## 快速指令
 ```bash

@@ -289,7 +289,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     
     // MARK: - CLI debug / tests
     
-    /// 不啟動 GUI 的情況下輸出可測試的解析結果（供 `--native-dump` 使用）。
+    /// 不啟動 GUI 的情況下輸出可測試的解析結果（供 `--dump` 使用）。
     static func debugDump(markdown: String) -> String {
         let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
@@ -325,7 +325,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         return out.joined(separator: "\n")
     }
     
-    /// 不啟動 GUI 的情況下輸出 Native 解析後的純文字（用於驗證 fenced code block 後續內容不會被吃掉）。
+    /// 不啟動 GUI 的情況下輸出渲染後的純文字（用於驗證 fenced code block 後續內容不會被吃掉）。
     static func debugRenderPlainText(markdown: String, pipeline: NativeMarkdownPipeline = .regex) -> String {
         let theme = NativeMarkdownTheme(zoom: 1.0)
         let attributed: NSAttributedString
@@ -339,7 +339,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         return attributed.string.replacingOccurrences(of: "\u{2028}", with: "\n")
     }
 
-    /// 不啟動 GUI 的情況下驗證 NSTextView/NSScrollView 寬度骨架是否正常。
+    /// 不啟動 GUI 的情況下驗證 NSTextView/NSScrollView 寬度骨架是否正常（供 `--skeleton-check` 使用）。
     /// 目標：避免回歸成「每字換行」（通常是 text container 寬度被錯誤同步成極小值）。
     static func debugSkeletonCheck() -> String {
         // 保守起見先初始化 NSApplication（即使不進 event loop）
@@ -816,12 +816,19 @@ private final class NativeMarkdownParser {
         // Notes.app 風格：用 tab stop 做出「符號/數字在左、文字統一對齊」的 hanging indent。
         // - prefix 後用 \t
         // - text 從 tab stop 開始
-        paragraphStyle.firstLineHeadIndent = 0
-        paragraphStyle.headIndent = 30
+        let bulletIndent: CGFloat = 14
+        let prefixWidth = (prefix as NSString).size(withAttributes: [.font: theme.paragraphFont]).width
+        let minTextIndent: CGFloat = 32
+        let textIndent = max(minTextIndent, bulletIndent + prefixWidth + 12)
+        
+        // 第一行（符號/數字）先縮排到 bulletIndent；文字用 tab 跳到 textIndent。
+        paragraphStyle.firstLineHeadIndent = bulletIndent
+        // 換行後的內容對齊文字起始（hanging indent）
+        paragraphStyle.headIndent = textIndent
         paragraphStyle.tabStops = [
-            NSTextTab(textAlignment: .left, location: paragraphStyle.headIndent, options: [:])
+            NSTextTab(textAlignment: .left, location: textIndent, options: [:])
         ]
-        paragraphStyle.defaultTabInterval = paragraphStyle.headIndent
+        paragraphStyle.defaultTabInterval = textIndent
         paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
         paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
         paragraphStyle.paragraphSpacing = 2
@@ -853,6 +860,8 @@ private final class NativeMarkdownParser {
     }
     
     private func renderCodeBlock(_ code: String, language: String) -> NSAttributedString {
+        let lang = language.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
         // 用 NSTextBlock 做出原生的 code block（背景 + padding + 邊框）
         let block = NSTextBlock()
         block.backgroundColor = theme.codeBackgroundColor
@@ -873,6 +882,17 @@ private final class NativeMarkdownParser {
             .foregroundColor: theme.textColor,
             .paragraphStyle: paragraphStyle
         ]
+
+        // Mermaid：若啟用且 `mmdc` 可用，嘗試渲染成圖片；失敗則 fallback 顯示 source。
+        if lang == "mermaid" {
+            let maxW = maxTableWidth
+            if let attachment = MermaidRenderer.renderAttachmentIfPossible(code: code, theme: theme, maxWidth: maxW) {
+                let out = NSMutableAttributedString(attributedString: attachment)
+                out.append(NSAttributedString(string: "\n", attributes: baseAttrs))
+                out.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: out.length))
+                return out
+            }
+        }
 
         // 優先使用 Highlightr（highlight.js via JavaScriptCore）；失敗再 fallback 到 regex。
         let out: NSMutableAttributedString

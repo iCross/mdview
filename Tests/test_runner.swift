@@ -113,6 +113,7 @@ func testFileSystem(_ runner: TestRunner) {
         "Sources/MarkdownWindowController.swift",
         "Sources/NativeMarkdownView.swift",
         "Sources/ASTMarkdownRenderer.swift",
+        "Sources/MermaidRenderer.swift",
         "Sources/IncrementalSyntaxHighlighter.swift",
         "Sources/FileHandler.swift",
         "Sources/MenuBuilder.swift"
@@ -308,7 +309,7 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // Blockquote 空行/段落間距：用純文字輸出做 deterministic regression
-    runner.run("mdviewer --native-render-text：blockquote 內 `>` 空行應產生段落分隔") {
+    runner.run("mdviewer --render-text：blockquote 內 `>` 空行應產生段落分隔") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let tmpFile = tmpDir.appendingPathComponent("mdviewer-blockquote-spacing-\(UUID().uuidString).md")
         let markdown = """
@@ -325,7 +326,7 @@ func testCompilation(_ runner: TestRunner) {
         }
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        let result = runProcess("\(basePath)/mdviewer", ["--native-render-text", tmpFile.path], timeoutSeconds: 2.0)
+        let result = runProcess("\(basePath)/mdviewer", ["--render-text", tmpFile.path], timeoutSeconds: 2.0)
         let output = result.output
 
         // 期待：
@@ -365,8 +366,8 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // Native dump：驗證表格解析至少被觸發（避免「表格不出現」回歸）
-    runner.run("mdviewer --native-dump 可解析 Fixtures/test.md 的表格") {
-        let result = runProcess("\(basePath)/mdviewer", ["--native-dump", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
+    runner.run("mdviewer --dump 可解析 Fixtures/test.md 的表格") {
+        let result = runProcess("\(basePath)/mdviewer", ["--dump", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("[[TABLE]]") &&
@@ -375,7 +376,7 @@ func testCompilation(_ runner: TestRunner) {
                output.contains("備註")
     }
 
-    runner.run("mdviewer --native-dump 可偵測圖片語法") {
+    runner.run("mdviewer --dump 可偵測圖片語法") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let tmpFile = tmpDir.appendingPathComponent("mdviewer-native-dump-image-test.md")
         let markdown = "![icon](./nonexistent.png)\n"
@@ -388,7 +389,7 @@ func testCompilation(_ runner: TestRunner) {
         defer { try? FileManager.default.removeItem(at: tmpFile) }
         
         let basePath = FileManager.default.currentDirectoryPath
-        let result = runProcess("\(basePath)/mdviewer", ["--native-dump", tmpFile.path], timeoutSeconds: 2.0)
+        let result = runProcess("\(basePath)/mdviewer", ["--dump", tmpFile.path], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("[[IMAGE]]") &&
@@ -397,8 +398,8 @@ func testCompilation(_ runner: TestRunner) {
     }
     
     // Native render text：驗證 fenced code block 結束後，後續段落仍會被渲染（回歸：JS 區塊後面沒顯示）
-    runner.run("mdviewer --native-render-text 不會吃掉 fenced code block 後的內容") {
-        let result = runProcess("\(basePath)/mdviewer", ["--native-render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
+    runner.run("mdviewer --render-text 不會吃掉 fenced code block 後的內容") {
+        let result = runProcess("\(basePath)/mdviewer", ["--render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         
         // code block 後面 Fixtures/test.md 會出現「表格範例」「引用區塊」「待辦清單」
@@ -409,8 +410,8 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // AST pipeline：至少應能啟動並在遇到 table/task/image 時自動 fallback（不應影響輸出）
-    runner.run("mdviewer --pipeline=ast --native-render-text 可正常輸出") {
-        let result = runProcess("\(basePath)/mdviewer", ["--pipeline=ast", "--native-render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
+    runner.run("mdviewer --pipeline=ast --render-text 可正常輸出") {
+        let result = runProcess("\(basePath)/mdviewer", ["--pipeline=ast", "--render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("表格範例") &&
@@ -419,8 +420,8 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // Native skeleton：驗證 NSTextView/NSScrollView 寬度骨架會正確同步（避免回歸成每字換行）
-    runner.run("mdviewer --native-skeleton-check 會回傳 SKELETON_OK") {
-        let result = runProcess("\(basePath)/mdviewer", ["--native-skeleton-check"], timeoutSeconds: 2.0)
+    runner.run("mdviewer --skeleton-check 會回傳 SKELETON_OK") {
+        let result = runProcess("\(basePath)/mdviewer", ["--skeleton-check"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SKELETON_OK")
     }
 

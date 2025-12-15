@@ -19,6 +19,7 @@ func printHelp() {
                               介面主題（預設 system；亦可用選單切換）
       --pipeline=regex|ast     Markdown 管線（預設 regex；ast 會在遇到 table/task/image 時 fallback）
       --ast                    等同 --pipeline=ast
+      --mermaid                啟用 Mermaid 圖表渲染（需要系統有 mmdc；否則 fallback 顯示原始碼）
       --smoke-test             GUI smoke test（建立視窗後自動退出）
       --screenshot <out.png>   啟動 GUI、渲染後截圖輸出 PNG，然後自動退出
       --screenshot=<out.png>   同上（等號形式）
@@ -31,10 +32,9 @@ func printHelp() {
       --screenshot-delay=<sec> 同上（等號形式）
 
     Debug/Testing:
-      --native-dump <file.md>  不啟動 GUI，輸出 Native 解析結果（供測試用）
-      --native-render-text <file.md>
-                              不啟動 GUI，輸出 Native 渲染後的純文字（供測試用）
-      --native-skeleton-check  不啟動 GUI，驗證 NSTextView/NSScrollView 寬度骨架
+      --dump <file.md>         不啟動 GUI，輸出解析結果（供測試用）
+      --render-text <file.md>  不啟動 GUI，輸出渲染後的純文字（供測試用）
+      --skeleton-check         不啟動 GUI，驗證 NSTextView/NSScrollView 寬度骨架
       --highlightr-check       不啟動 GUI，驗證 Highlightr（bundle resources/JSCore）可用
     """)
 }
@@ -141,9 +141,9 @@ if args.contains("--help") || args.contains("-h") {
     exit(0)
 }
 
-// --native-dump=path 或 --native-dump path
-if let dumpArg = args.first(where: { $0.hasPrefix("--native-dump=") }) {
-    let path = dumpArg.replacingOccurrences(of: "--native-dump=", with: "")
+// --dump=path 或 --dump path
+if let dumpArg = args.first(where: { $0.hasPrefix("--dump=") }) {
+    let path = dumpArg.replacingOccurrences(of: "--dump=", with: "")
     if let content = try? String(contentsOfFile: path, encoding: .utf8) {
         print(NativeMarkdownView.debugDump(markdown: content))
         exit(0)
@@ -152,7 +152,7 @@ if let dumpArg = args.first(where: { $0.hasPrefix("--native-dump=") }) {
         exit(2)
     }
 }
-if args.contains("--native-dump"), let path = parseValueAfterFlag("--native-dump", in: args) {
+if args.contains("--dump"), let path = parseValueAfterFlag("--dump", in: args) {
     if let content = try? String(contentsOfFile: path, encoding: .utf8) {
         print(NativeMarkdownView.debugDump(markdown: content))
         exit(0)
@@ -162,9 +162,9 @@ if args.contains("--native-dump"), let path = parseValueAfterFlag("--native-dump
     }
 }
 
-// --native-render-text=path 或 --native-render-text path
-if let dumpArg = args.first(where: { $0.hasPrefix("--native-render-text=") }) {
-    let path = dumpArg.replacingOccurrences(of: "--native-render-text=", with: "")
+// --render-text=path 或 --render-text path
+if let dumpArg = args.first(where: { $0.hasPrefix("--render-text=") }) {
+    let path = dumpArg.replacingOccurrences(of: "--render-text=", with: "")
     if let content = try? String(contentsOfFile: path, encoding: .utf8) {
         print(NativeMarkdownView.debugRenderPlainText(markdown: content, pipeline: nativePipeline))
         exit(0)
@@ -173,7 +173,7 @@ if let dumpArg = args.first(where: { $0.hasPrefix("--native-render-text=") }) {
         exit(2)
     }
 }
-if args.contains("--native-render-text"), let path = parseValueAfterFlag("--native-render-text", in: args) {
+if args.contains("--render-text"), let path = parseValueAfterFlag("--render-text", in: args) {
     if let content = try? String(contentsOfFile: path, encoding: .utf8) {
         print(NativeMarkdownView.debugRenderPlainText(markdown: content, pipeline: nativePipeline))
         exit(0)
@@ -183,7 +183,7 @@ if args.contains("--native-render-text"), let path = parseValueAfterFlag("--nati
     }
 }
 
-if args.contains("--native-skeleton-check") {
+if args.contains("--skeleton-check") {
     print(NativeMarkdownView.debugSkeletonCheck())
     exit(0)
 }
