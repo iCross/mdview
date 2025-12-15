@@ -34,6 +34,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     
     private var clipViewBoundsObserver: NSObjectProtocol?
     private var clipViewFrameObserver: NSObjectProtocol?
+    private var remoteImageObserver: NSObjectProtocol?
     
     // MARK: - Initialization
     
@@ -52,6 +53,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     deinit {
         if let o = clipViewBoundsObserver { NotificationCenter.default.removeObserver(o) }
         if let o = clipViewFrameObserver { NotificationCenter.default.removeObserver(o) }
+        if let o = remoteImageObserver { NotificationCenter.default.removeObserver(o) }
     }
     
     // MARK: - Setup
@@ -109,6 +111,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         textView.setFrameSize(scrollView.contentView.bounds.size)
         
         startObservingScrollViewGeometry()
+        startObservingRemoteImages()
         syncTextContainerWidth()
     }
 
@@ -139,6 +142,25 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
             ) { [weak self] _ in
                 self?.syncTextContainerWidth()
             }
+        }
+    }
+    
+    private func startObservingRemoteImages() {
+        if remoteImageObserver != nil { return }
+        remoteImageObserver = NotificationCenter.default.addObserver(
+            forName: .mdviewerRemoteImageDidLoad,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            // 保守策略：外連圖片載入完成後，觸發一次 attributes edited + layout 以更新顯示。
+            if let storage = self.textView.textStorage {
+                let full = NSRange(location: 0, length: storage.length)
+                storage.edited(.editedAttributes, range: full, changeInLength: 0)
+            }
+            self.syncTextContainerWidth()
+            self.textView.layoutSubtreeIfNeeded()
+            self.textView.displayIfNeeded()
         }
     }
     
@@ -1237,22 +1259,38 @@ private final class NativeMarkdownParser {
             let rawURL = (s as NSString).substring(with: urlRange)
             let urlString = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
             
-            if let url = resolveResourceURL(urlString),
-               let image = NSImage(contentsOf: url) {
-                let attachment = NSTextAttachment()
-                attachment.image = image
-                
-                // 以一個合理的最大寬度縮放，避免超大圖片撐爆版面
-                let maxWidth: CGFloat = CGFloat(720.0 * theme.zoom)
-                let size = image.size
-                if size.width > 0 && size.height > 0 {
-                    let ratio = min(1.0, maxWidth / size.width)
-                    let displaySize = NSSize(width: size.width * ratio, height: size.height * ratio)
-                    attachment.bounds = NSRect(x: 0, y: 0, width: displaySize.width, height: displaySize.height)
+            if let url = resolveResourceURL(urlString) {
+                // 外連圖片：非阻塞載入（避免卡 UI/影響啟動速度）
+                if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+                    let maxWidth: CGFloat = CGFloat(720.0 * theme.zoom)
+                    let attachment = RemoteImageAttachment(url: url, maxWidth: maxWidth, zoom: theme.zoom)
+                    attachment.startIfNeeded()
+
+                    let imgString = NSMutableAttributedString(attachment: attachment)
+                    // 讓圖片也能點擊開啟 URL（若 NSTextView 支援 link on attachment）
+                    imgString.addAttribute(.link, value: url.absoluteString, range: NSRange(location: 0, length: imgString.length))
+                    attributed.replaceCharacters(in: fullRange, with: imgString)
+                    continue
                 }
-                
-                let imgString = NSAttributedString(attachment: attachment)
-                attributed.replaceCharacters(in: fullRange, with: imgString)
+
+                // 本機圖片：同步載入（讀檔快，且不涉及網路）
+                if let image = NSImage(contentsOf: url) {
+                    let attachment = NSTextAttachment()
+                    attachment.image = image
+                    
+                    // 以一個合理的最大寬度縮放，避免超大圖片撐爆版面
+                    let maxWidth: CGFloat = CGFloat(720.0 * theme.zoom)
+                    let size = image.size
+                    if size.width > 0 && size.height > 0 {
+                        let ratio = min(1.0, maxWidth / size.width)
+                        let displaySize = NSSize(width: size.width * ratio, height: size.height * ratio)
+                        attachment.bounds = NSRect(x: 0, y: 0, width: displaySize.width, height: displaySize.height)
+                    }
+                    
+                    let imgString = NSAttributedString(attachment: attachment)
+                    attributed.replaceCharacters(in: fullRange, with: imgString)
+                    continue
+                }
             } else {
                 // fallback：顯示 alt 或 Image 文字，並在可能時附上連結
                 let label = altText.isEmpty ? "Image" : altText

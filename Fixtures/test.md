@@ -10,19 +10,17 @@
 
 ## 清單（縮排應接近 macOS Notes）
 
-- abc
-- def
-- ijk
+•  def lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+•  ijk lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 
-1. abc
-2. def
-3. ijk
+1.  abc lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+2.  def lorem ipsum dolor sit amet, consectetur adipiscing elit. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
 ## 圖片（範例）
 
 > 注意：這裡用不存在的檔案做範例，渲染器會 fallback 顯示文字（不依賴網路/外部檔案）。
 
-![本機圖片 placeholder](./nonexistent.png)
+![外連圖片 placeholder](https://placehold.co/720x360/png?text=mdview+image)
 
 ## Mermaid（可選）
 
