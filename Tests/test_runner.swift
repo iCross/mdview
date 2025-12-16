@@ -4,6 +4,7 @@
 
 import Foundation
 import Darwin
+import Compression
 
 // MARK: - 測試框架
 
@@ -127,13 +128,17 @@ func testFileSystem(_ runner: TestRunner) {
     }
     
     // 測試可執行檔存在
-    runner.run("mdviewer 可執行檔存在") {
-        fm.fileExists(atPath: "\(basePath)/mdviewer")
+    runner.run("mdview 可執行檔存在") {
+        fm.fileExists(atPath: "\(basePath)/mdview")
     }
     
     // 測試 Fixtures/test.md 存在
     runner.run("Fixtures/test.md 測試檔案存在") {
         fm.fileExists(atPath: "\(basePath)/Fixtures/test.md")
+    }
+
+    runner.run("Fixtures/mermaid.md 測試檔案存在") {
+        fm.fileExists(atPath: "\(basePath)/Fixtures/mermaid.md")
     }
     
     // 測試 Makefile 存在
@@ -226,31 +231,84 @@ func testFileContents(_ runner: TestRunner) {
                content.contains("- ") &&   // 列表
                content.contains("|")       // 表格
     }
+
+    runner.run("Fixtures/mermaid.md 包含 mermaid fenced code block") {
+        guard let content = try? String(contentsOfFile: "\(basePath)/Fixtures/mermaid.md", encoding: .utf8) else {
+            return false
+        }
+        return content.contains("```mermaid") && content.contains("flowchart")
+    }
 }
 
 // MARK: - 編譯測試
+
+private func extractMermaidCodes(from markdown: String) -> [String] {
+    // 找所有 ```mermaid ... ``` 區塊並回傳內文（去除首尾空白/換行，對齊 MermaidRenderer 的行為）
+    let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+    let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+
+    var inFence = false
+    var lang = ""
+    var buf: [String] = []
+    var out: [String] = []
+    for line in lines {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("```") {
+            if inFence {
+                if lang == "mermaid" {
+                    out.append(buf.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                inFence = false
+                lang = ""
+                buf.removeAll(keepingCapacity: true)
+            } else {
+                inFence = true
+                lang = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                buf.removeAll(keepingCapacity: true)
+            }
+            continue
+        }
+        if inFence { buf.append(line) }
+    }
+    return out
+}
+
+private func base64URLDecode(_ s: String) -> Data? {
+    var b64 = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+    let rem = b64.count % 4
+    if rem != 0 {
+        b64.append(String(repeating: "=", count: 4 - rem))
+    }
+    return Data(base64Encoded: b64)
+}
+
+private func base64URLDecodeToUTF8String(_ s: String) -> String? {
+    guard let data = base64URLDecode(s) else { return nil }
+    return String(data: data, encoding: .utf8)
+}
 
 func testCompilation(_ runner: TestRunner) {
     print("\n🔨 編譯測試")
     print(String(repeating: "-", count: 40))
     
     // 測試可執行檔是否為有效的 Mach-O 二進制檔
-    runner.run("mdviewer 是有效的 Mach-O 執行檔") {
+    runner.run("mdview 是有效的 Mach-O 執行檔") {
         let basePath = FileManager.default.currentDirectoryPath
-        let result = runProcess("/usr/bin/file", ["\(basePath)/mdviewer"], timeoutSeconds: 2.0)
+        // mdview 在 repo root 可能是 symlink（指向 .build 產物）；file 需用 -L 跟隨 symlink
+        let result = runProcess("/usr/bin/file", ["-L", "\(basePath)/mdview"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("Mach-O") && result.output.contains("executable")
     }
     
     // 測試二進制檔連結的框架
-    runner.run("mdviewer 連結 AppKit 框架") {
+    runner.run("mdview 連結 AppKit 框架") {
         let basePath = FileManager.default.currentDirectoryPath
-        let result = runProcess("/usr/bin/otool", ["-L", "\(basePath)/mdviewer"], timeoutSeconds: 2.0)
+        let result = runProcess("/usr/bin/otool", ["-L", "\(basePath)/mdview"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("AppKit")
     }
     
-    runner.run("mdviewer 不應連結 WebKit 框架") {
+    runner.run("mdview 不應連結 WebKit 框架") {
         let basePath = FileManager.default.currentDirectoryPath
-        let result = runProcess("/usr/bin/otool", ["-L", "\(basePath)/mdviewer"], timeoutSeconds: 2.0)
+        let result = runProcess("/usr/bin/otool", ["-L", "\(basePath)/mdview"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && !result.output.contains("WebKit")
     }
 
@@ -260,15 +318,15 @@ func testCompilation(_ runner: TestRunner) {
     let basePath = FileManager.default.currentDirectoryPath
     let allowSkipSubprocess = (ProcessInfo.processInfo.environment["MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS"] == "1")
 
-    let probe = runProcess("\(basePath)/mdviewer", ["--help"], timeoutSeconds: 2.0)
-    let canRunMdviewer = !probe.didTimeout && probe.terminationStatus == 0
-    if !canRunMdviewer {
+    let probe = runProcess("\(basePath)/mdview", ["--help"], timeoutSeconds: 2.0)
+    let canRunMdview = !probe.didTimeout && probe.terminationStatus == 0
+    if !canRunMdview {
         if allowSkipSubprocess {
-            print("  ⚠️ 跳過 mdviewer 子行程測試（MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1）：status=\(probe.terminationStatus) timeout=\(probe.didTimeout)")
+            print("  ⚠️ 跳過 mdview 子行程測試（MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1）：status=\(probe.terminationStatus) timeout=\(probe.didTimeout)")
             return
         } else {
             runner.run(
-                "mdviewer 子行程可正常啟動（--help）",
+                "mdview 子行程可正常啟動（--help）",
                 test: { false },
                 message: "status=\(probe.terminationStatus) timeout=\(probe.didTimeout)"
             )
@@ -277,25 +335,25 @@ func testCompilation(_ runner: TestRunner) {
     }
     
     // GUI smoke test：確保從 CLI 啟動能建立視窗並自動退出
-    runner.run("mdviewer --smoke-test 可正常顯示 GUI 並退出") {
-        let result = runProcess("\(basePath)/mdviewer", ["--smoke-test"], timeoutSeconds: 5.0)
+    runner.run("mdview --smoke-test 可正常顯示 GUI 並退出") {
+        let result = runProcess("\(basePath)/mdview", ["--smoke-test"], timeoutSeconds: 5.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SMOKE_OK")
     }
 
     // 背景/子行程環境下，強制 activate 可能導致系統直接打死；因此提供 --no-activate 作保險。
-    runner.run("mdviewer --no-activate --smoke-test 可正常退出") {
-        let result = runProcess("\(basePath)/mdviewer", ["--no-activate", "--smoke-test"], timeoutSeconds: 5.0)
+    runner.run("mdview --no-activate --smoke-test 可正常退出") {
+        let result = runProcess("\(basePath)/mdview", ["--no-activate", "--smoke-test"], timeoutSeconds: 5.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SMOKE_OK")
     }
 
     // GUI screenshot test：確保能輸出 PNG
-    runner.run("mdviewer --screenshot 可輸出 PNG 並退出") {
+    runner.run("mdview --screenshot 可輸出 PNG 並退出") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        let out = tmpDir.appendingPathComponent("mdviewer-screenshot-\(UUID().uuidString).png")
+        let out = tmpDir.appendingPathComponent("mdview-screenshot-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: out) }
 
         let result = runProcess(
-            "\(basePath)/mdviewer",
+            "\(basePath)/mdview",
             ["--screenshot", out.path, "--screenshot-delay", "0.2", "\(basePath)/Fixtures/test.md"],
             timeoutSeconds: 8.0
         )
@@ -310,9 +368,9 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // Blockquote 空行/段落間距：用純文字輸出做 deterministic regression
-    runner.run("mdviewer --render-text：blockquote 內 `>` 空行應產生段落分隔") {
+    runner.run("mdview --render-text：blockquote 內 `>` 空行應產生段落分隔") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        let tmpFile = tmpDir.appendingPathComponent("mdviewer-blockquote-spacing-\(UUID().uuidString).md")
+        let tmpFile = tmpDir.appendingPathComponent("mdview-blockquote-spacing-\(UUID().uuidString).md")
         let markdown = """
         > line1
         > line2
@@ -327,7 +385,7 @@ func testCompilation(_ runner: TestRunner) {
         }
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        let result = runProcess("\(basePath)/mdviewer", ["--render-text", tmpFile.path], timeoutSeconds: 2.0)
+        let result = runProcess("\(basePath)/mdview", ["--render-text", tmpFile.path], timeoutSeconds: 2.0)
         let output = result.output
 
         // 期待：
@@ -339,14 +397,14 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // Screenshot + scroll-to：確保能穩定截到非首屏區塊（table/quote 等）
-    runner.run("mdviewer --screenshot-scroll-to 可捲動並輸出 PNG") {
+    runner.run("mdview --screenshot-scroll-to 可捲動並輸出 PNG") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        let out = tmpDir.appendingPathComponent("mdviewer-screenshot-scroll-to-\(UUID().uuidString).png")
+        let out = tmpDir.appendingPathComponent("mdview-screenshot-scroll-to-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: out) }
 
         let fixture = "\(basePath)/Fixtures/table_width.md"
         let result = runProcess(
-            "\(basePath)/mdviewer",
+            "\(basePath)/mdview",
             ["--no-activate", "--screenshot", out.path, "--screenshot-delay", "0.2", "--screenshot-scroll-to", "SCROLLTARGETTABLE", fixture],
             timeoutSeconds: 10.0
         )
@@ -361,14 +419,14 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // CLI help：不應啟動 GUI，且應快速退出
-    runner.run("mdviewer --help 可正常退出並顯示使用說明") {
-        let result = runProcess("\(basePath)/mdviewer", ["--help"], timeoutSeconds: 2.0)
+    runner.run("mdview --help 可正常退出並顯示使用說明") {
+        let result = runProcess("\(basePath)/mdview", ["--help"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("Usage:") && result.output.contains("--pipeline")
     }
 
     // Native dump：驗證表格解析至少被觸發（避免「表格不出現」回歸）
-    runner.run("mdviewer --dump 可解析 Fixtures/test.md 的表格") {
-        let result = runProcess("\(basePath)/mdviewer", ["--dump", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
+    runner.run("mdview --dump 可解析 Fixtures/test.md 的表格") {
+        let result = runProcess("\(basePath)/mdview", ["--dump", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("[[TABLE]]") &&
@@ -377,9 +435,9 @@ func testCompilation(_ runner: TestRunner) {
                output.contains("備註")
     }
 
-    runner.run("mdviewer --dump 可偵測圖片語法") {
+    runner.run("mdview --dump 可偵測圖片語法") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        let tmpFile = tmpDir.appendingPathComponent("mdviewer-native-dump-image-test.md")
+        let tmpFile = tmpDir.appendingPathComponent("mdview-native-dump-image-test.md")
         let markdown = "![icon](./nonexistent.png)\n"
         
         do {
@@ -390,17 +448,109 @@ func testCompilation(_ runner: TestRunner) {
         defer { try? FileManager.default.removeItem(at: tmpFile) }
         
         let basePath = FileManager.default.currentDirectoryPath
-        let result = runProcess("\(basePath)/mdviewer", ["--dump", tmpFile.path], timeoutSeconds: 2.0)
+        let result = runProcess("\(basePath)/mdview", ["--dump", tmpFile.path], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("[[IMAGE]]") &&
                output.contains("icon") &&
                output.contains("./nonexistent.png")
     }
+
+    // Mermaid.ink encoder：不依賴網路的 URL 形狀驗證（由 mdview --dump 產生）
+    runner.run("mdview --dump 會輸出 Mermaid diagram URL（mermaid.ink /svg/<base64url(text)>）") {
+        let result = runProcess("\(basePath)/mdview", ["--dump", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
+        guard !result.didTimeout, result.terminationStatus == 0 else { return false }
+
+        // 期望有一行：[[MERMAID_URL]] https://mermaid.ink/svg/<base64url>?...
+        guard let line = result.output
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+            .first(where: { $0.hasPrefix("[[MERMAID_URL]] ") }) else {
+            return false
+        }
+        let urlString = line.replacingOccurrences(of: "[[MERMAID_URL]] ", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: urlString) else { return false }
+        guard url.host == "mermaid.ink" else { return false }
+        guard url.path.hasPrefix("/svg/") else { return false }
+
+        // base64url 僅允許 [A-Za-z0-9_-]，且不應包含 '=' 或空白
+        let payload = String(url.path.dropFirst("/svg/".count))
+        guard !payload.isEmpty else { return false }
+        guard !payload.contains("="), payload.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return false }
+
+        // 只允許 base64url 字元
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        return payload.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
+    // Mermaid：不依賴網路的 deterministic 驗證：
+    // 1) --render-text 內應包含 attachment 的 object replacement char（U+FFFC）
+    runner.run("mdview Mermaid fixture：--render-text 會包含 attachment placeholder（U+FFFC）") {
+        let fixture = "\(basePath)/Fixtures/mermaid.md"
+        let result = runProcess("\(basePath)/mdview", ["--render-text", fixture], timeoutSeconds: 2.0)
+        let output = result.output
+        return !result.didTimeout && result.terminationStatus == 0 &&
+               output.contains("flowchart TD") &&
+               output.contains("\u{FFFC}")
+    }
+
+    // 2) --dump 的 [[MERMAID_URL]] 可 round-trip 回原始 code（base64url decode + zlib inflate）
+    runner.run("mdview Mermaid fixture：mermaid.ink URL 可 round-trip 還原原始 code（含中文/多段）") {
+        let fixturePath = "\(basePath)/Fixtures/mermaid.md"
+        guard let fixtureContent = try? String(contentsOfFile: fixturePath, encoding: .utf8) else { return false }
+        let expectedCodes = extractMermaidCodes(from: fixtureContent)
+        guard !expectedCodes.isEmpty else { return false }
+
+        let dump = runProcess("\(basePath)/mdview", ["--dump", fixturePath], timeoutSeconds: 2.0)
+        guard !dump.didTimeout, dump.terminationStatus == 0 else { return false }
+
+        let lines = dump.output
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        let urlLines = lines.filter { $0.hasPrefix("[[MERMAID_URL]] ") }
+        guard urlLines.count == expectedCodes.count else { return false }
+
+        for (idx, line) in urlLines.enumerated() {
+            let urlString = line.replacingOccurrences(of: "[[MERMAID_URL]] ", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let url = URL(string: urlString), url.host == "mermaid.ink" else { return false }
+            guard url.path.hasPrefix("/svg/") else { return false }
+
+            let payload = String(url.path.dropFirst("/svg/".count))
+            guard let decoded = base64URLDecodeToUTF8String(payload) else { return false }
+            
+            // 移除 MermaidRenderer 自動注入的 init directive（%%{init: ...}%%），比對原始 code
+            let decodedTrimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+            let expectedCode = expectedCodes[idx]
+            
+            // 若 decoded 包含 init directive，則將其移除後再比對
+            let codeWithoutInit: String
+            if decodedTrimmed.hasPrefix("%%{init:") {
+                // 找到第一個 }%% 後的換行，取後面的內容
+                if let range = decodedTrimmed.range(of: "}%%") {
+                    var afterInit = String(decodedTrimmed[range.upperBound...])
+                    // 移除開頭的換行
+                    while afterInit.hasPrefix("\n") {
+                        afterInit.removeFirst()
+                    }
+                    codeWithoutInit = afterInit.trimmingCharacters(in: .whitespacesAndNewlines)
+                } else {
+                    codeWithoutInit = decodedTrimmed
+                }
+            } else {
+                codeWithoutInit = decodedTrimmed
+            }
+            
+            if codeWithoutInit != expectedCode {
+                return false
+            }
+        }
+
+        return true
+    }
     
     // Native render text：驗證 fenced code block 結束後，後續段落仍會被渲染（回歸：JS 區塊後面沒顯示）
-    runner.run("mdviewer --render-text 不會吃掉 fenced code block 後的內容") {
-        let result = runProcess("\(basePath)/mdviewer", ["--render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
+    runner.run("mdview --render-text 不會吃掉 fenced code block 後的內容") {
+        let result = runProcess("\(basePath)/mdview", ["--render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         
         // code block 後面 Fixtures/test.md 會出現「表格範例」「引用區塊」「待辦清單」
@@ -411,8 +561,8 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // AST pipeline：至少應能啟動並在遇到 table/task/image 時自動 fallback（不應影響輸出）
-    runner.run("mdviewer --pipeline=ast --render-text 可正常輸出") {
-        let result = runProcess("\(basePath)/mdviewer", ["--pipeline=ast", "--render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
+    runner.run("mdview --pipeline=ast --render-text 可正常輸出") {
+        let result = runProcess("\(basePath)/mdview", ["--pipeline=ast", "--render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("表格範例") &&
@@ -421,14 +571,14 @@ func testCompilation(_ runner: TestRunner) {
     }
 
     // Native skeleton：驗證 NSTextView/NSScrollView 寬度骨架會正確同步（避免回歸成每字換行）
-    runner.run("mdviewer --skeleton-check 會回傳 SKELETON_OK") {
-        let result = runProcess("\(basePath)/mdviewer", ["--skeleton-check"], timeoutSeconds: 2.0)
+    runner.run("mdview --skeleton-check 會回傳 SKELETON_OK") {
+        let result = runProcess("\(basePath)/mdview", ["--skeleton-check"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SKELETON_OK")
     }
 
     // Highlightr：驗證 SPM resource bundle + JSCore 可正常使用
-    runner.run("mdviewer --highlightr-check 會回傳 HIGHLIGHTR_OK") {
-        let result = runProcess("\(basePath)/mdviewer", ["--highlightr-check"], timeoutSeconds: 4.0)
+    runner.run("mdview --highlightr-check 會回傳 HIGHLIGHTR_OK") {
+        let result = runProcess("\(basePath)/mdview", ["--highlightr-check"], timeoutSeconds: 4.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("HIGHLIGHTR_OK")
     }
 }

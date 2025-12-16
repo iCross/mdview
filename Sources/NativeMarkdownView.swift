@@ -239,7 +239,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         
         - 拖放 `.md` / `.markdown` 檔案到此視窗
         - 或使用選單 `File → Open` 開啟檔案
-        - 或使用命令列：`./mdviewer path/to/file.md`
+        - 或使用命令列：`./mdview path/to/file.md`
         """
         
         let maxTableWidth = textView.textContainer?.containerSize.width
@@ -318,8 +318,54 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         
         var out: [String] = []
         let imageRegex = try? NSRegularExpression(pattern: "!\\[([^\\]]*?)\\]\\(([^\\)]+?)\\)", options: [])
+        var inCodeFence = false
+        var codeFenceLanguage = ""
+        var codeBuffer: [String] = []
         var i = 0
         while i < lines.count {
+            // fenced code block（debug 用：保留原文，並在 mermaid fence 結束後額外輸出 diagram URL）
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") {
+                if inCodeFence {
+                    // close
+                    out.append(line)
+                    if codeFenceLanguage == "mermaid" {
+                        let code = codeBuffer.joined(separator: "\n")
+                        // 保持舊格式（向後兼容測試）
+                        if let url = MermaidRenderer.makeDiagramURL(code: code, appearance: nil) {
+                            out.append("[[MERMAID_URL]] \(url.absoluteString)")
+                        } else {
+                            out.append("[[MERMAID_URL]] (invalid)")
+                        }
+                        // 額外輸出對比資訊（方便使用者查看原版）
+                        if let comparison = MermaidRenderer.makeDiagramURLComparison(code: code, appearance: nil) {
+                            out.append("[[MERMAID_URL_COMPARISON]]")
+                            out.append(comparison)
+                        }
+                    }
+                    inCodeFence = false
+                    codeFenceLanguage = ""
+                    codeBuffer.removeAll(keepingCapacity: true)
+                    i += 1
+                    continue
+                } else {
+                    // open
+                    out.append(line)
+                    inCodeFence = true
+                    codeFenceLanguage = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    codeBuffer.removeAll(keepingCapacity: true)
+                    i += 1
+                    continue
+                }
+            }
+            if inCodeFence {
+                out.append(line)
+                codeBuffer.append(line)
+                i += 1
+                continue
+            }
+
             if i + 1 < lines.count, NativeMarkdownParser.looksLikeTableHeaderStatic(lines[i], separatorLine: lines[i + 1]) {
                 let (header, rows, consumed) = NativeMarkdownParser.parseTableStatic(from: lines, startIndex: i)
                 out.append("[[TABLE]] " + header.joined(separator: " | "))
@@ -329,9 +375,8 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
                 i += consumed
                 continue
             }
-            
+
             if let imageRegex {
-                let line = lines[i]
                 let matches = imageRegex.matches(in: line, options: [], range: NSRange(location: 0, length: (line as NSString).length))
                 for m in matches {
                     guard m.numberOfRanges >= 3 else { continue }
@@ -340,7 +385,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
                     out.append("[[IMAGE]] \(alt) | \(url)")
                 }
             }
-            out.append(lines[i])
+            out.append(line)
             i += 1
         }
         
@@ -659,17 +704,17 @@ private final class NativeMarkdownParser {
                 continue
             }
             
-            // 待辦清單 / 無序清單
+            // 待辦清單 / 無序清單（支援多級縮排）
             if let task = parseTaskListItem(line) {
                 flushPendingParagraph()
-                output.append(renderListItem(prefix: task.checked ? "☑︎" : "☐", text: task.text))
+                output.append(renderListItem(prefix: task.checked ? "☑︎" : "☐", text: task.text, depth: task.depth))
                 output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
             }
             if let bullet = parseBulletListItem(line) {
                 flushPendingParagraph()
-                output.append(renderListItem(prefix: "•", text: bullet))
+                output.append(renderListItem(prefix: "•", text: bullet.text, depth: bullet.depth))
                 output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
@@ -679,7 +724,7 @@ private final class NativeMarkdownParser {
             if let ordered = parseOrderedListItem(line) {
                 flushPendingParagraph()
                 // ordered list：用 "." + tab 做對齊（類似 Notes）
-                output.append(renderListItem(prefix: "\(ordered.index).", text: ordered.text))
+                output.append(renderListItem(prefix: "\(ordered.index).", text: ordered.text, depth: ordered.depth))
                 output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
@@ -757,8 +802,26 @@ private final class NativeMarkdownParser {
         return (text, i - startIndex)
     }
     
-    private func parseTaskListItem(_ line: String) -> (checked: Bool, text: String)? {
+    private func listIndentDepth(_ line: String) -> Int {
+        // 以「顯示縮排」為目標的簡化 nested list 支援：
+        // - 空白 2 個算一層（可支援很多級）
+        // - tab 視為 4 spaces
+        var spaces = 0
+        for ch in line {
+            if ch == " " {
+                spaces += 1
+            } else if ch == "\t" {
+                spaces += 4
+            } else {
+                break
+            }
+        }
+        return min(20, max(0, spaces / 2))
+    }
+
+    private func parseTaskListItem(_ line: String) -> (depth: Int, checked: Bool, text: String)? {
         // "- [x] text" / "- [ ] text"
+        let depth = listIndentDepth(line)
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasPrefix("- [") || trimmed.hasPrefix("* [") || trimmed.hasPrefix("+ [") else { return nil }
         guard trimmed.count >= 6 else { return nil }
@@ -769,19 +832,24 @@ private final class NativeMarkdownParser {
         let checked = (mark == "x" || mark == "X")
         let start = 5
         let text = String(chars.dropFirst(start)).trimmingCharacters(in: .whitespaces)
-        return (checked, text)
+        return (depth, checked, text)
     }
     
-    private func parseBulletListItem(_ line: String) -> String? {
-        // "- text" "* text" "+ text"
+    private func parseBulletListItem(_ line: String) -> (depth: Int, text: String)? {
+        // "- text" "* text" "+ text" / "• text"
+        let depth = listIndentDepth(line)
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 3 else { return nil }
-        guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") else { return nil }
-        return String(trimmed.dropFirst(2))
+        guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") || trimmed.hasPrefix("• ") || trimmed.hasPrefix("•\t") else { return nil }
+        if trimmed.hasPrefix("•") {
+            return (depth, String(trimmed.dropFirst(1)).trimmingCharacters(in: .whitespaces))
+        }
+        return (depth, String(trimmed.dropFirst(2)))
     }
     
-    private func parseOrderedListItem(_ line: String) -> (index: Int, text: String)? {
-        // "1. text"
+    private func parseOrderedListItem(_ line: String) -> (depth: Int, index: Int, text: String)? {
+        // "1. text"（含縮排）
+        let depth = listIndentDepth(line)
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard let dotIndex = trimmed.firstIndex(of: ".") else { return nil }
         let numberPart = trimmed[..<dotIndex]
@@ -789,7 +857,7 @@ private final class NativeMarkdownParser {
         let afterDot = trimmed[trimmed.index(after: dotIndex)...]
         guard afterDot.first == " " else { return nil }
         let text = afterDot.trimmingCharacters(in: .whitespaces)
-        return (n, text)
+        return (depth, n, text)
     }
     
     // MARK: - Block Renderers
@@ -833,14 +901,16 @@ private final class NativeMarkdownParser {
         return out
     }
     
-    private func renderListItem(prefix: String, text: String) -> NSAttributedString {
+    private func renderListItem(prefix: String, text: String, depth: Int = 0) -> NSAttributedString {
         let paragraphStyle = NSMutableParagraphStyle()
         // Notes.app 風格：用 tab stop 做出「符號/數字在左、文字統一對齊」的 hanging indent。
         // - prefix 後用 \t
         // - text 從 tab stop 開始
-        let bulletIndent: CGFloat = 14
+        let d = min(20, max(0, depth))
+        let depthIndent = CGFloat(d) * 16
+        let bulletIndent: CGFloat = 14 + depthIndent
         let prefixWidth = (prefix as NSString).size(withAttributes: [.font: theme.paragraphFont]).width
-        let minTextIndent: CGFloat = 32
+        let minTextIndent: CGFloat = 32 + depthIndent
         let textIndent = max(minTextIndent, bulletIndent + prefixWidth + 12)
         
         // 第一行（符號/數字）先縮排到 bulletIndent；文字用 tab 跳到 textIndent。
@@ -905,30 +975,45 @@ private final class NativeMarkdownParser {
             .paragraphStyle: paragraphStyle
         ]
 
-        // Mermaid：若啟用且 `mmdc` 可用，嘗試渲染成圖片；失敗則 fallback 顯示 source。
-        if lang == "mermaid" {
-            let maxW = maxTableWidth
-            if let attachment = MermaidRenderer.renderAttachmentIfPossible(code: code, theme: theme, maxWidth: maxW) {
-                let out = NSMutableAttributedString(attributedString: attachment)
-                out.append(NSAttributedString(string: "\n", attributes: baseAttrs))
-                out.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: out.length))
-                return out
-            }
-        }
-
         // 優先使用 Highlightr（highlight.js via JavaScriptCore）；失敗再 fallback 到 regex。
-        let out: NSMutableAttributedString
+        let codeOut: NSMutableAttributedString
         if let highlighted = NativeHighlightr.highlight(code: code, languageHint: language, theme: theme) {
-            out = NSMutableAttributedString(attributedString: highlighted)
-            out.append(NSAttributedString(string: "\n", attributes: baseAttrs))
+            codeOut = NSMutableAttributedString(attributedString: highlighted)
+            codeOut.append(NSAttributedString(string: "\n", attributes: baseAttrs))
         } else {
-            out = NSMutableAttributedString(string: code + "\n", attributes: baseAttrs)
-            NativeCodeHighlighter.applyRegexHighlight(to: out, languageHint: language, theme: theme)
+            codeOut = NSMutableAttributedString(string: code + "\n", attributes: baseAttrs)
+            NativeCodeHighlighter.applyRegexHighlight(to: codeOut, languageHint: language, theme: theme)
         }
         
         // 標示成 code（避免後續 inline 規則覆蓋）
-        out.addAttribute(Self.isCodeAttribute, value: true, range: NSRange(location: 0, length: out.length))
-        out.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: out.length))
+        let codeRange = NSRange(location: 0, length: codeOut.length)
+        codeOut.addAttribute(Self.isCodeAttribute, value: true, range: codeRange)
+        codeOut.addAttribute(.paragraphStyle, value: paragraphStyle, range: codeRange)
+
+        // Mermaid：保留 code block，並在下方額外插入 diagram（mermaid.ink；非阻塞載入）
+        let out = NSMutableAttributedString(attributedString: codeOut)
+        if lang == "mermaid" {
+            let maxW = maxTableWidth
+            if let diagram = MermaidRenderer.makeAttachment(code: code, theme: theme, maxWidth: maxW) {
+                let p = NSMutableParagraphStyle()
+                p.alignment = .center
+                p.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
+                p.lineSpacing = theme.baseParagraphStyle.lineSpacing
+                p.paragraphSpacing = 10
+                p.paragraphSpacingBefore = 4
+                p.lineBreakMode = .byWordWrapping
+
+                let diagramOut = NSMutableAttributedString(attributedString: diagram)
+                let r = NSRange(location: 0, length: diagramOut.length)
+                diagramOut.addAttributes([
+                    .font: theme.paragraphFont,
+                    .foregroundColor: theme.textColor,
+                    .paragraphStyle: p
+                ], range: r)
+                out.append(diagramOut)
+            }
+        }
+
         return out
     }
 

@@ -1,4 +1,4 @@
-# mdview（`mdviewer`）— TODO（進度追蹤，給 LLM）
+# mdview（`mdview`）— TODO（進度追蹤，給 LLM）
 
 ## 現況
 - **Renderer**：Native-only（`NSTextView`）
@@ -25,8 +25,8 @@
 ```bash
 make debug
 make test
-./mdviewer Fixtures/test.md
+./mdview Fixtures/test.md
 
 # 視覺驗證（PNG）
-./mdviewer --no-activate --screenshot .tmp/mdviewer.png --screenshot-delay 0.2 Fixtures/test.md
+./mdview --no-activate --screenshot .tmp/mdview.png --screenshot-delay 0.2 Fixtures/test.md
 ```

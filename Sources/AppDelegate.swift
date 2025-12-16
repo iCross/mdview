@@ -488,7 +488,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         1. 拖放 .md 或 .markdown 檔案到視窗
         2. 使用 File → Open 開啟檔案
-        3. 命令列：./mdviewer path/to/file.md
+        3. 命令列：./mdview path/to/file.md
         
         快捷鍵：
         • ⌘O - 開啟檔案

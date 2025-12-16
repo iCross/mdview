@@ -7,7 +7,7 @@ let package = Package(
         .macOS(.v10_15),
     ],
     products: [
-        .executable(name: "mdviewer", targets: ["mdviewer"]),
+        .executable(name: "mdview", targets: ["mdview"]),
     ],
     dependencies: [
         // AST-based Markdown parsing (CommonMark + extensions where supported)
@@ -17,7 +17,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "mdviewer",
+            name: "mdview",
             dependencies: [
                 .product(name: "Markdown", package: "swift-markdown"),
                 .product(name: "Highlightr", package: "Highlightr"),

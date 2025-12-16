@@ -5,7 +5,7 @@ import AppKit
 import Highlightr
 
 func printHelp() {
-    let exe = (CommandLine.arguments.first as NSString?)?.lastPathComponent ?? "mdviewer"
+    let exe = (CommandLine.arguments.first as NSString?)?.lastPathComponent ?? "mdview"
     print("""
     Markdown Viewer
 
@@ -19,7 +19,6 @@ func printHelp() {
                               介面主題（預設 system；亦可用選單切換）
       --pipeline=regex|ast     Markdown 管線（預設 regex；ast 會在遇到 table/task/image 時 fallback）
       --ast                    等同 --pipeline=ast
-      --mermaid                啟用 Mermaid 圖表渲染（需要系統有 mmdc；否則 fallback 顯示原始碼）
       --smoke-test             GUI smoke test（建立視窗後自動退出）
       --screenshot <out.png>   啟動 GUI、渲染後截圖輸出 PNG，然後自動退出
       --screenshot=<out.png>   同上（等號形式）

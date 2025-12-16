@@ -1,6 +1,8 @@
 .DS_Store
 
 # Build outputs
+mdview
+mdview.dSYM/
 mdviewer
 mdviewer.dSYM/
 .build/

@@ -210,17 +210,7 @@ struct ASTMarkdownRenderer {
                 .paragraphStyle: p
             ]
 
-            // Mermaid：若啟用且 `mmdc` 可用，嘗試渲染成圖片；失敗則 fallback 顯示 source。
-            if let lang = codeBlock.language?.lowercased(), lang == "mermaid" {
-                if let attachment = MermaidRenderer.renderAttachmentIfPossible(code: codeBlock.code, theme: theme, maxWidth: nil) {
-                    let m = NSMutableAttributedString(attributedString: attachment)
-                    m.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: m.length))
-                    out.append(m)
-                    out.append(NSAttributedString(string: "\n", attributes: baseAttrs))
-                    out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
-                    return
-                }
-            }
+            // 先渲染 code block（保留原始內容）
             if let hl = Self.highlightr {
                 hl.theme.setCodeFont(theme.monoFont)
                 _ = hl.setTheme(to: (NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua) ? "paraiso-dark" : "paraiso-light")
@@ -230,12 +220,30 @@ struct ASTMarkdownRenderer {
                     m.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: m.length))
                     out.append(m)
                     out.append(NSAttributedString(string: "\n", attributes: baseAttrs))
-                    out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
-                    return
+                } else {
+                    out.append(NSAttributedString(string: codeBlock.code + "\n", attributes: baseAttrs))
+                }
+            } else {
+                out.append(NSAttributedString(string: codeBlock.code + "\n", attributes: baseAttrs))
+            }
+
+            // Mermaid：在 code block 下方額外插入 diagram（mermaid.ink；非阻塞載入）
+            if let lang = codeBlock.language?.lowercased(), lang == "mermaid" {
+                if let diagram = MermaidRenderer.makeAttachment(code: codeBlock.code, theme: theme, maxWidth: nil) {
+                    let dp = NSMutableParagraphStyle()
+                    dp.alignment = .center
+                    dp.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
+                    dp.lineSpacing = theme.baseParagraphStyle.lineSpacing
+                    dp.paragraphSpacing = 10
+                    dp.paragraphSpacingBefore = 4
+                    dp.lineBreakMode = .byWordWrapping
+
+                    let diagramOut = NSMutableAttributedString(attributedString: diagram)
+                    diagramOut.addAttribute(.paragraphStyle, value: dp, range: NSRange(location: 0, length: diagramOut.length))
+                    out.append(diagramOut)
                 }
             }
 
-            out.append(NSAttributedString(string: codeBlock.code + "\n", attributes: baseAttrs))
             out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
         }
 

@@ -1,4 +1,4 @@
-# mdview（`mdviewer`）— LLM 專案入口
+# mdview（`mdview`）— LLM 專案入口
 
 ## 目的
 macOS Markdown Reader（AppKit）。**只讀**：讀取本機 `.md`/`.markdown`，渲染到畫面，支援拖放與檔案變更自動 reload。
@@ -9,10 +9,10 @@ make debug
 make test
 make smoke
 
-./mdviewer Fixtures/test.md
-./mdviewer Fixtures/test.md Fixtures/table_width.md
-./mdviewer --theme=dark Fixtures/test.md
-./mdviewer --help
+./mdview Fixtures/test.md
+./mdview Fixtures/test.md Fixtures/table_width.md
+./mdview --theme=dark Fixtures/test.md
+./mdview --help
 ```
 
 ## CLI（以 `Sources/main.swift` 為準）
@@ -20,7 +20,7 @@ make smoke
 - **主題（Theme）**：`--theme=system|light|dark`（預設 system；也可用選單 `檢視 → 主題` 切換）
 - **Markdown pipeline**：`--pipeline=regex|ast`、`--ast`
 - **GUI smoke**：`--smoke-test`（建立視窗後自動退出）
-- **Mermaid（可選）**：`--mermaid`（需要系統有 `mmdc`；否則 fallback 顯示原始碼）
+- **Mermaid（預設）**：遇到 ` ```mermaid ` code block 時，會**保留 code block**，並在下方額外插入一張圖（透過 `mermaid.ink` 產生 SVG；需要網路；載入為非阻塞）
 - **GUI screenshot（CI/LLM 視覺驗證）**：
   - `--screenshot <out.png>`、`--screenshot-delay <sec>`（預設 1.0）
   - `--screenshot-scroll-to <text>`（推薦：確保目標區塊一定在截圖範圍內）
@@ -62,7 +62,7 @@ make smoke
 - 或改用 `.app bundle` 形式啟動（較符合 macOS 慣例，且也更容易有正式 Dock icon）
 
 ## 在「無法啟動 GUI 子行程」環境
-預設 `make test` 會把「mdviewer 子行程不可執行」視為失敗（避免掩蓋回歸）。若你在特殊環境需要跳過，改用：
+預設 `make test` 會把「mdview 子行程不可執行」視為失敗（避免掩蓋回歸）。若你在特殊環境需要跳過，改用：
 
 ```bash
 MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1 make test

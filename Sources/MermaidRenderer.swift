@@ -1,158 +1,177 @@
 import AppKit
 import Foundation
 
-/// Mermaid fenced code block renderer (optional).
+/// Mermaid fenced code block renderer (via mermaid.ink).
 ///
-/// 預設不強制依賴任何外部工具；若偵測到 `mmdc`（mermaid-cli）可用且啟用 mermaid，
-/// 會嘗試把 ` ```mermaid ` 內容轉成 PNG 並以 NSTextAttachment 顯示，否則 fallback 顯示原始碼。
+/// 設計目標：
+/// - 不依賴 `mmdc` / mermaid-cli
+/// - 預設會嘗試顯示 Mermaid diagram（以外連圖片載入）
+/// - 保留 code block 原文；diagram 由上層 renderer 另行插入
 enum MermaidRenderer {
-    private static var cachedAvailability: Bool?
-    private static let availabilityLock = NSLock()
-    private static var imageCache: [String: NSImage] = [:]
-    private static let cacheLock = NSLock()
+    /// 讓 PNG 有更好的文字銳利度（retina/縮放時）；對 mermaid.ink 來說 `scale` 必須搭配 `width/height`。
+    private static let pngRasterScale: Int = 2
 
-    static func isEnabled() -> Bool {
-        let env = ProcessInfo.processInfo.environment
-        if env["MDVIEWER_MERMAID"] == "1" { return true }
-        return CommandLine.arguments.contains("--mermaid")
+    /// 產生 mermaid.ink 的 SVG diagram URL（pako: zlib-deflate + base64url）。
+    static func makeDiagramURL(code: String, appearance: NSAppearance?) -> URL? {
+        makeMermaidInkURL(endpoint: .svg, code: code, appearance: appearance)
     }
-
-    static func renderAttachmentIfPossible(code: String, theme: NativeMarkdownTheme, maxWidth: CGFloat?) -> NSAttributedString? {
-        guard isEnabled() else { return nil }
-        guard isMmdcAvailable() else { return nil }
-
-        let key = cacheKey(code: code, theme: theme, maxWidth: maxWidth)
-        if let cached = cachedImage(forKey: key) {
-            return attributedAttachment(for: cached, theme: theme, maxWidth: maxWidth)
-        }
-
-        guard let img = renderViaMmdc(code: code) else { return nil }
-        cacheImage(img, forKey: key)
-        return attributedAttachment(for: img, theme: theme, maxWidth: maxWidth)
+    
+    /// 產生「原版」mermaid.ink SVG URL（不注入 htmlLabels:false；用於對比原始渲染結果）。
+    ///
+    /// - Note: 可用於查看 mermaid.ink 的原始輸出（可能含 foreignObject/HTML labels）。
+    static func makeOriginalDiagramURL(code: String, appearance: NSAppearance?) -> URL? {
+        makeMermaidInkURL(endpoint: .svg, code: code, appearance: appearance, injectNativeSVGConfig: false)
     }
-
-    // MARK: - Availability
-
-    private static func isMmdcAvailable() -> Bool {
-        availabilityLock.lock()
-        defer { availabilityLock.unlock() }
-
-        if let cachedAvailability { return cachedAvailability }
-        let ok = (runProcessCapture("/usr/bin/env", ["which", "mmdc"], timeoutSeconds: 0.3).terminationStatus == 0)
-        cachedAvailability = ok
-        return ok
-    }
-
-    // MARK: - Render
-
-    private static func renderViaMmdc(code: String) -> NSImage? {
-        // 注意：mmdc 可能非常慢（首次跑 puppeteer/Chromium）；避免卡住，給短 timeout，失敗即 fallback。
-        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("mdviewer-mermaid-\(UUID().uuidString)", isDirectory: true)
-        let inFile = tmpDir.appendingPathComponent("diagram.mmd")
-        let outFile = tmpDir.appendingPathComponent("diagram.png")
-
-        do {
-            try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-            try code.write(to: inFile, atomically: true, encoding: .utf8)
-        } catch {
+    
+    /// 產生對比資訊：原版 vs. 修改版（native SVG）的 URL。
+    ///
+    /// - Returns: 包含兩個 URL 的字串，方便在瀏覽器中對比渲染結果。
+    static func makeDiagramURLComparison(code: String, appearance: NSAppearance?) -> String? {
+        guard let originalURL = makeOriginalDiagramURL(code: code, appearance: appearance),
+              let nativeURL = makeDiagramURL(code: code, appearance: appearance) else {
             return nil
         }
-
-        // `mmdc` 參數：避免多餘輸出，並用透明背景
-        let result = runProcessCapture(
-            "/usr/bin/env",
-            ["mmdc", "-i", inFile.path, "-o", outFile.path, "-b", "transparent", "--quiet"],
-            timeoutSeconds: 1.2
-        )
-
-        guard result.terminationStatus == 0, FileManager.default.fileExists(atPath: outFile.path) else {
-            return nil
-        }
-
-        return NSImage(contentsOf: outFile)
+        return """
+        原版 (htmlLabels 預設):
+        \(originalURL.absoluteString)
+        
+        修改版 (htmlLabels:false):
+        \(nativeURL.absoluteString)
+        """
     }
 
-    private static func attributedAttachment(for image: NSImage, theme: NativeMarkdownTheme, maxWidth: CGFloat?) -> NSAttributedString {
-        let attachment = NSTextAttachment()
-
-        // 依可用寬度縮放，避免撐爆 layout
+    /// 產生可顯示於 NSTextView 的外連圖片附件。
+    ///
+    /// - Note: 會立即觸發非阻塞下載（不等待網路）。
+    static func makeAttachment(code: String, theme: NativeMarkdownTheme, maxWidth: CGFloat?) -> NSAttributedString? {
+        let appearance = NSApp?.effectiveAppearance
+        // 需求：render 結果要和 mermaid.ink「原版」一致（例如 edge labels 會有白底框，文字不應壓在線條上）。
+        //
+        // 現況：
+        // - AppKit 的 SVG decoder 對 Mermaid 產出的 SVG（尤其是文字 baseline/foreignObject）支援不完整，
+        //   即使透過 `htmlLabels:false` 轉成純 SVG text，也可能出現文字位置偏移（例如壓到線條上）。
+        //
+        // 解法：
+        // - 顯示時**優先使用 PNG**（由 mermaid.ink rasterize，效果與瀏覽器渲染一致）
+        // - link 仍指向原始 SVG（方便使用者在瀏覽器查看/另存向量）
         let wLimit: CGFloat = {
             if let maxWidth { return max(120, maxWidth) }
             return CGFloat(720.0 * theme.zoom)
         }()
 
-        let size = image.size
-        if size.width > 0 && size.height > 0 {
-            let ratio = min(1.0, wLimit / size.width)
-            let displaySize = NSSize(width: size.width * ratio, height: size.height * ratio)
-            attachment.bounds = NSRect(x: 0, y: 0, width: displaySize.width, height: displaySize.height)
-        }
-        attachment.image = image
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
 
-        return NSAttributedString(attachment: attachment)
+        // 以顯示用 maxWidth（點數）作為 raster request 的 width，上層再用 scale/downscale 讓顯示保持在點數但更銳利。
+        let rasterWidth = Int(ceil(max(1, wLimit)))
+        let originalPNGURL = makeMermaidInkURL(
+            endpoint: .png,
+            code: trimmed,
+            appearance: appearance,
+            rasterWidth: rasterWidth,
+            rasterScale: pngRasterScale,
+            injectNativeSVGConfig: false
+        )
+        let originalSVGURL = makeMermaidInkURL(
+            endpoint: .svg,
+            code: trimmed,
+            appearance: appearance,
+            injectNativeSVGConfig: false
+        )
+
+        guard let primaryURL = originalPNGURL ?? originalSVGURL else { return nil }
+
+        let attachment = RemoteImageAttachment(url: primaryURL, fallbackURL: nil, maxWidth: wLimit, zoom: theme.zoom)
+        attachment.startIfNeeded()
+
+        let out = NSMutableAttributedString(attachment: attachment)
+        // link 指向「原版 SVG」（向量、且可在瀏覽器看到完整 HTML labels）
+        let linkURL = originalSVGURL ?? primaryURL
+        out.addAttribute(.link, value: linkURL.absoluteString, range: NSRange(location: 0, length: out.length))
+        return out
     }
 
-    // MARK: - Cache
+    // MARK: - Mermaid.ink URL generation
 
-    private static func cacheKey(code: String, theme: NativeMarkdownTheme, maxWidth: CGFloat?) -> String {
-        // zoom 會影響縮放；maxWidth 也會影響顯示大小
-        let w = maxWidth ?? -1
-        return "z=\(theme.zoom)|w=\(w)|" + code
+    private enum MermaidInkEndpoint {
+        case svg
+        case png
     }
 
-    private static func cachedImage(forKey key: String) -> NSImage? {
-        cacheLock.lock()
-        defer { cacheLock.unlock() }
-        return imageCache[key]
+    private static func makeMermaidInkURL(
+        endpoint: MermaidInkEndpoint,
+        code: String,
+        appearance: NSAppearance?,
+        rasterWidth: Int? = nil,
+        rasterScale: Int? = nil,
+        injectNativeSVGConfig: Bool = true
+    ) -> URL? {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        // mermaid.ink 目前可穩定支援 `/svg/<base64url(utf8)>` 形式（不需 pako 壓縮）。
+        // 先以最簡單且可預期的 encoding 走通，避免 API 版本差異導致 diagram 全部變成 error SVG。
+        let finalCode = injectNativeSVGConfig ? makeCodeForNativeSVGDisplay(trimmed) : trimmed
+        guard let payload = makeBase64URLPayload(code: finalCode) else { return nil }
+
+        let isDark = (appearance?.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+        let theme = isDark ? "dark" : "default"
+
+        var c = URLComponents()
+        c.scheme = "https"
+        c.host = "mermaid.ink"
+
+        switch endpoint {
+        case .svg:
+            c.path = "/svg/\(payload)"
+            c.queryItems = [
+                URLQueryItem(name: "theme", value: theme),
+                URLQueryItem(name: "bgColor", value: "transparent")
+            ]
+        case .png:
+            // PNG fallback：用 img endpoint + type=png
+            c.path = "/img/\(payload)"
+            var items: [URLQueryItem] = [
+                URLQueryItem(name: "type", value: "png"),
+                URLQueryItem(name: "theme", value: theme),
+                URLQueryItem(name: "bgColor", value: "transparent")
+            ]
+            // mermaid.ink：scale 必須搭配 width 或 height；這裡用 width 作為上限（像素），讓大圖可拿到 2x raster 再由 client downscale。
+            if let rasterWidth, rasterWidth > 0 {
+                items.append(URLQueryItem(name: "width", value: String(rasterWidth)))
+            }
+            if let rasterScale, rasterScale > 1, rasterWidth != nil {
+                items.append(URLQueryItem(name: "scale", value: String(rasterScale)))
+            }
+            c.queryItems = items
+        }
+
+        return c.url
     }
 
-    private static func cacheImage(_ image: NSImage, forKey key: String) {
-        cacheLock.lock()
-        defer { cacheLock.unlock() }
-        imageCache[key] = image
+    private static func makeBase64URLPayload(code: String) -> String? {
+        guard let data = code.data(using: .utf8) else { return nil }
+        // base64url: + -> -, / -> _, trim '='
+        var b64 = data.base64EncodedString()
+        b64 = b64.replacingOccurrences(of: "+", with: "-")
+        b64 = b64.replacingOccurrences(of: "/", with: "_")
+        b64 = b64.replacingOccurrences(of: "=", with: "")
+        return b64
     }
 
-    // MARK: - Process helper
+    /// 讓 mermaid.ink 回傳「不含 foreignObject」的 SVG（以便 AppKit 可正確渲染 labels）。
+    ///
+    /// - Note:
+    ///   - Mermaid 的 `htmlLabels:false` 在不同版本/diagram type 上的行為略有差異。
+    ///   - 目前觀察：需要同時設 top-level 與 flowchart 的 htmlLabels 才能完全移除 foreignObject。
+    private static func makeCodeForNativeSVGDisplay(_ code: String) -> String {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
 
-    private struct ProcessRunResult {
-        let terminationStatus: Int32
-        let output: String
-    }
+        // 若使用者已提供 init directive，就尊重原始設定（避免覆寫行為）。
+        if trimmed.contains("%%{init:") { return trimmed }
 
-    private static func runProcessCapture(_ executablePath: String, _ arguments: [String], timeoutSeconds: TimeInterval) -> ProcessRunResult {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: executablePath)
-        task.arguments = arguments
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = pipe
-
-        do {
-            try task.run()
-        } catch {
-            return ProcessRunResult(terminationStatus: 127, output: "ERROR: failed to run: \(error)")
-        }
-
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while task.isRunning && Date() < deadline {
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-        }
-
-        if task.isRunning {
-            task.terminate()
-        }
-
-        // 等一點點再讀 output
-        let exitDeadline = Date().addingTimeInterval(0.2)
-        while task.isRunning && Date() < exitDeadline {
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-        }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
-        return ProcessRunResult(terminationStatus: task.terminationStatus, output: output)
+        let initDirective = #"%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false}} }%%"#
+        return initDirective + "\n" + trimmed
     }
 }
 

@@ -1,20 +1,50 @@
-# mdview fixture（`mdviewer`）
+# mdview fixture（`mdview`）
 
 這個檔案是給自動化測試與手動 smoke 用的 Markdown 範例（請保持關鍵字內容穩定，測試會依賴）。
 
-## 標題層級
+## 標題層級（二級標題測試）
 
-### 第三級標題（inline code：`mdviewer`）
+### 第三級標題（inline code：`mdview`）
+
+#### 第四級標題
 
 粗體 **bold**、斜體 *italic*、刪除線 ~~strike~~、連結 [GitHub](https://github.com)。
 
 ## 清單（縮排應接近 macOS Notes）
 
-•  def lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-•  ijk lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+### 基本清單
 
-1.  abc lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-2.  def lorem ipsum dolor sit amet, consectetur adipiscing elit. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+•  lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+•  lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+1.  lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+2.  lorem ipsum dolor sit amet, consectetur adipiscing elit. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+### 多級清單縮排測試
+
+- 第一級項目
+  - 第二級項目 A
+  - 第二級項目 B
+    - 第三級項目 1
+    - 第三級項目 2
+      - 第四級項目 α
+      - 第四級項目 β
+  - 第二級項目 C
+- 第一級項目 2
+
+1. 第一級有序項目
+   1. 第二級有序項目
+   2. 第二級有序項目
+      - 混合：無序子項
+      - 混合：無序子項
+   3. 第二級有序項目
+2. 第一級有序項目 2
+
+- [ ] 待辦事項：第一級
+  - [ ] 待辦事項：第二級未完成
+  - [x] 待辦事項：第二級已完成
+    - [ ] 待辦事項：第三級
+- [x] 待辦事項：第一級已完成
 
 ## 圖片（範例）
 
@@ -22,12 +52,12 @@
 
 ![外連圖片 placeholder](https://placehold.co/720x360/png?text=mdview+image)
 
-## Mermaid（可選）
+## Mermaid
 
-> 若要把 Mermaid 真的渲染成圖，請用 `--mermaid`（需要系統有 `mmdc`）；否則會以 code block 顯示原始碼。
+> Mermaid 會**保留 code block**，並在下方額外顯示 diagram（透過 `mermaid.ink` **優先顯示 PNG（與原版渲染一致）**；需要網路；非阻塞載入；點擊圖可開啟原始 SVG 連結）。
 
 ```mermaid
-graph TD
+flowchart TD
   A[Start] --> B{Choice}
   B -->|Yes| C[OK]
   B -->|No| D[Retry]

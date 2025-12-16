@@ -37,7 +37,7 @@
 - [ ] Tests：更新並跑 `make test`
 
 ## 驗收
-- CLI：`./mdviewer a.md b.md c.md` 會同時開多個視窗
+- CLI：`./mdview a.md b.md c.md` 會同時開多個視窗
 - Theme：切換後 code highlight 與背景/文字色系一致更新
 - Dock icon：顯示 mdview icon（非 exec）
 - `make test` 通過
@@ -45,4 +45,4 @@
 ## 後續補充（2025-12-15）
 - 清單縮排改為更接近 macOS Notes：符號/數字也會跟著縮排，並用 tab stop + hanging indent 對齊文字。
 - `Fixtures/test.md` 擴充：加入 H1/H2/H3、圖片語法、bullet/ordered list、mermaid 範例。
-- Mermaid 支援：新增 `--mermaid`（需要系統有 `mmdc`；否則 fallback 顯示原始碼）。
+- Mermaid 支援：遇到 ` ```mermaid ` code block 時會保留原始碼，並在下方額外顯示 diagram（透過 `mermaid.ink` 產生 SVG；需要網路；非阻塞載入）。

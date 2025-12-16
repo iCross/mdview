@@ -1,7 +1,7 @@
 # macOS Markdown Viewer - Makefile
 # 使用 swiftc 編譯原生 macOS 應用程式
 
-APP_NAME = mdviewer
+APP_NAME = mdview
 SOURCES = Sources/main.swift \
           Sources/AppDelegate.swift \
           Sources/MarkdownRenderable.swift \
@@ -29,17 +29,19 @@ all: debug
 debug: $(SOURCES)
 	@echo "🔨 編譯 Debug 版本..."
 	@perl -e 'alarm shift; exec @ARGV' 300 swift build -c debug --product $(APP_NAME)
-	@cp -f .build/debug/$(APP_NAME) ./$(APP_NAME)
 	@# macOS Gatekeeper 在部分環境會拒絕執行未簽章二進制；用 ad-hoc sign 確保可在測試/子行程中正常啟動
-	@/usr/bin/codesign --force --sign - ./$(APP_NAME)
+	@# 注意：swift build 的執行檔旁邊可能需要 SPM 產生的 resource bundles；因此不直接複製二進制到 repo root，
+	@# 而是對 .build 產物簽章後，在 repo root 建立 symlink（./mdview -> .build/.../mdview）。
+	@/usr/bin/codesign --force --sign - .build/debug/$(APP_NAME)
+	@ln -sf .build/debug/$(APP_NAME) ./$(APP_NAME)
 	@echo "✅ 編譯完成: ./$(APP_NAME)"
 
 # Release 版本
 release: $(SOURCES)
 	@echo "🚀 編譯 Release 版本..."
 	@perl -e 'alarm shift; exec @ARGV' 300 swift build -c release --product $(APP_NAME)
-	@cp -f .build/release/$(APP_NAME) ./$(APP_NAME)
-	@/usr/bin/codesign --force --sign - ./$(APP_NAME)
+	@/usr/bin/codesign --force --sign - .build/release/$(APP_NAME)
+	@ln -sf .build/release/$(APP_NAME) ./$(APP_NAME)
 	@echo "✅ 編譯完成: ./$(APP_NAME)"
 
 # 清除編譯產物
@@ -47,6 +49,7 @@ clean:
 	@echo "🧹 清除編譯產物..."
 	@# 用 trash 移到 macOS Trash；路徑不存在時不要讓 make 失敗
 	@if [ -e "./$(APP_NAME)" ]; then trash "./$(APP_NAME)"; fi
+	@if [ -e "./mdviewer" ]; then trash "./mdviewer"; fi
 	@if [ -d ".build" ]; then trash ".build"; fi
 	@echo "✅ 清除完成"
 
