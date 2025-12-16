@@ -25,7 +25,7 @@
 - [x] `git rm Sources/IncrementalSyntaxHighlighter.swift`
 - [x] 移除 `Sources/FileHandler.swift` 內未使用 helper methods（`fileExists/isMarkdownFile/getFileName/getFileDirectory`）
 - [x] 跑 `make debug` / `make test` + smoke（`make debug`、`make test`、`./mdview --help`、`./mdview --no-activate --smoke-test` 皆通過）
-- [ ] commit
+- [x] commit（`391e71b3d04697af6ae68da143e3be05bc014f44`）
 
 ### 驗證結果摘要
 - `make debug`: ✅
