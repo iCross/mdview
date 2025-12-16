@@ -10,7 +10,6 @@ SOURCES = Sources/main.swift \
           Sources/ASTMarkdownRenderer.swift \
           Sources/MermaidRenderer.swift \
           Sources/RemoteImageAttachment.swift \
-          Sources/IncrementalSyntaxHighlighter.swift \
           Sources/FileHandler.swift \
           Sources/MenuBuilder.swift
 

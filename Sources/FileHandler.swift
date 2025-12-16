@@ -40,15 +40,6 @@ class FileHandler {
         }
     }
     
-    func fileExists(at path: String) -> Bool {
-        return FileManager.default.fileExists(atPath: path)
-    }
-    
-    func isMarkdownFile(at path: String) -> Bool {
-        let ext = (path as NSString).pathExtension.lowercased()
-        return ext == "md" || ext == "markdown"
-    }
-    
     // MARK: - File Watching
     
     func startWatching(path: String) {
@@ -127,13 +118,5 @@ class FileHandler {
         
         let currentDirectory = FileManager.default.currentDirectoryPath
         return (currentDirectory as NSString).appendingPathComponent(path)
-    }
-    
-    func getFileName(from path: String) -> String {
-        return (path as NSString).lastPathComponent
-    }
-    
-    func getFileDirectory(from path: String) -> String {
-        return (path as NSString).deletingLastPathComponent
     }
 }

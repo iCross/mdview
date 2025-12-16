@@ -116,7 +116,6 @@ func testFileSystem(_ runner: TestRunner) {
         "Sources/ASTMarkdownRenderer.swift",
         "Sources/MermaidRenderer.swift",
         "Sources/RemoteImageAttachment.swift",
-        "Sources/IncrementalSyntaxHighlighter.swift",
         "Sources/FileHandler.swift",
         "Sources/MenuBuilder.swift"
     ]
