@@ -1,6 +1,7 @@
 // main.swift
 // macOS Markdown Viewer - Application entry point
 
+import Foundation
 import AppKit
 import Highlightr
 
@@ -14,6 +15,7 @@ func printHelp() {
 
     Options:
       --help, -h               Show this help and exit
+      --wait, --debug          Keep the process attached to this terminal (default: detach and return immediately)
       --no-activate            Do not force the app to the foreground (recommended for background jobs `&` or automation)
       --theme=system|light|dark
                               UI theme (default: system; can also be changed via the menu)
@@ -134,6 +136,8 @@ func parseNativePipeline(in args: [String]) -> NativeMarkdownPipeline {
 let args = CommandLine.arguments
 let nativePipeline = parseNativePipeline(in: args)
 let themePreference = parseThemePreference(in: args)
+let wantsWait = args.contains("--wait") || args.contains("--debug")
+let isChildGUI = args.contains("--child-gui")
 
 if args.contains("--help") || args.contains("-h") {
     printHelp()
@@ -202,6 +206,42 @@ if args.contains("--highlightr-check") {
         print("HIGHLIGHTR_FAIL")
         exit(1)
     }
+}
+
+func shouldStayAttachedToTerminal(_ args: [String]) -> Bool {
+    if args.contains("--smoke-test") { return true }
+    // Screenshot-related workflows are typically used in scripts and should block until completion.
+    if args.contains(where: { $0.hasPrefix("--screenshot") }) { return true }
+    if args.contains("--screenshot-full") { return true }
+    if args.contains("--screenshot-scroll-to") { return true }
+    if args.contains("--screenshot-scroll-y") { return true }
+    if args.contains(where: { $0.hasPrefix("--screenshot-delay") }) { return true }
+    return false
+}
+
+func spawnDetachedGUIProcessAndExit() {
+    let cwdURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+    let exeURL = URL(fileURLWithPath: args[0], relativeTo: cwdURL).standardizedFileURL
+
+    let child = Process()
+    child.executableURL = exeURL
+    child.arguments = Array(args.dropFirst()) + ["--child-gui"]
+    child.standardOutput = FileHandle.nullDevice
+    child.standardError = FileHandle.nullDevice
+
+    do {
+        try child.run()
+        exit(0)
+    } catch {
+        // Fallback to foreground mode if we fail to spawn (keeps behavior functional).
+        fputs("WARN: Failed to detach GUI process: \(error)\n", stderr)
+        return
+    }
+}
+
+// Default behavior: detach so the terminal returns immediately, similar to `open`.
+if !isChildGUI && !wantsWait && !shouldStayAttachedToTerminal(args) {
+    spawnDetachedGUIProcessAndExit()
 }
 
 // Create the application instance

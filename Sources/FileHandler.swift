@@ -90,8 +90,10 @@ class FileHandler {
         
         dispatchSource = source
         source.resume()
-        
-        print("Started watching file: \(path)")
+
+        if CommandLine.arguments.contains("--debug") {
+            fputs("Started watching file: \(path)\n", stderr)
+        }
     }
     
     func stopWatching() {

@@ -16,6 +16,7 @@ make smoke
 ```
 
 ## CLI (source of truth: `Sources/main.swift`)
+- **Attach/detach**: default **detaches** (terminal returns immediately, similar to `open`); use `--wait` (or `--debug`) to keep the process attached
 - **Foreground/background**: `--no-activate` (recommended for background jobs `&` / subprocesses / CI to avoid being killed by the system)
 - **Theme**: `--theme=system|light|dark` (default: system; can also switch via menu `View → Theme`)
 - **Markdown pipeline**：`--pipeline=regex|ast`、`--ast`
