@@ -1,6 +1,6 @@
-# Mermaid fixture（`mdview`）
+# Mermaid fixture (`mdview`)
 
-這個檔案專門用來測 Mermaid code block 的行為（不依賴網路也能做 deterministic 測試）。
+This file is dedicated to testing Mermaid code block behavior (deterministic and does not require network access).
 
 SCROLLTARGET_MERMAID
 
@@ -13,18 +13,18 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  A[開始] --> B{選擇}
-  B -->|是| C[成功]
-  B -->|否| D[重試]
+  A[Start] --> B{Choice}
+  B -->|Yes| C[Success]
+  B -->|No| D[Retry]
   D --> A
 ```
 
 ```mermaid
 stateDiagram-v2
-  [*] --> 閒置
-  閒置 --> 進行中: 開始
-  進行中 --> 閒置: 完成
+  [*] --> Idle
+  Idle --> InProgress: Start
+  InProgress --> Idle: Done
 ```
 
-下方應該會出現多個 diagram attachment（先 placeholder，之後若有網路會載入圖）。
+Multiple diagram attachments should appear below (placeholder first; if network is available they may load the images).
 

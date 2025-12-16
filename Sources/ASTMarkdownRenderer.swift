@@ -5,20 +5,20 @@ import Highlightr
 
 /// AST-based Markdown → NSAttributedString renderer (swift-markdown).
 ///
-/// 目前採「能穩定處理的語法用 AST；遇到 GFM table/task/image 等就整份 fallback」策略，
-/// 以便逐步導入 AST 而不破壞既有功能。
+/// Current strategy: use AST for syntax we can handle reliably; if we detect GFM table/task/image, fall back for the whole document.
+/// This lets us introduce the AST pipeline incrementally without breaking existing behavior.
 struct ASTMarkdownRenderer {
     let theme: NativeMarkdownTheme
 
     static func canRender(markdown: String) -> Bool {
-        // swift-markdown 以 CommonMark 為主；本 repo 既有 native parser 已支援：
+        // swift-markdown focuses on CommonMark; the existing native parser in this repo already supports:
         // - pipe tables
         // - task lists
         // - images (NSTextAttachment)
-        // 先採保守策略：一旦偵測到這些語法，交回既有 parser 全權處理。
+        // Use a conservative policy: if we detect these, let the native parser handle everything.
         let s = markdown
         if s.contains("|") {
-            // 粗略：若出現典型表格分隔線，就視為 table
+            // Heuristic: if we see a typical table separator line, treat it as a table.
             if s.range(of: #"(?m)^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$"#, options: .regularExpression) != nil {
                 return false
             }
@@ -63,7 +63,7 @@ struct ASTMarkdownRenderer {
             let doc = Document(parsing: markdown)
             visit(doc)
 
-            // 讓輸出尾端有一個換行（跟現有 native parser 行為一致，方便 textView layout）
+            // Ensure the output ends with a newline (match the native parser behavior; helps NSTextView layout).
             if out.length > 0, !out.string.hasSuffix("\n") {
                 out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
             }
@@ -87,8 +87,8 @@ struct ASTMarkdownRenderer {
         }
 
         mutating func visitSoftBreak(_ softBreak: SoftBreak) {
-            // soft break 在 blockquote 內若用 "\n" 容易被視為段落分隔而引發 paragraphSpacing；
-            // 這裡在 quote context 改用 U+2028（line separator）維持同段落換行。
+            // In a blockquote, using "\n" for soft breaks can be treated as a paragraph break and trigger paragraphSpacing.
+            // In quote context, use U+2028 (line separator) to keep it as an in-paragraph line break.
             if blockQuoteDepth > 0 {
                 out.append(NSAttributedString(string: "\u{2028}", attributes: currentAttributes))
             } else {
@@ -165,7 +165,7 @@ struct ASTMarkdownRenderer {
         }
 
         mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
-            // 用 NSTextBlock 做出引用視覺（與既有 native parser 一致概念）
+            // Use NSTextBlock for blockquote styling (same concept as the existing native parser).
             let block = NSTextBlock()
             block.backgroundColor = NSColor.clear
             block.setContentWidth(100, type: .percentageValueType)
@@ -190,7 +190,7 @@ struct ASTMarkdownRenderer {
         }
 
         mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
-            // Reader：先做 block 視覺 + mono font；語法高亮會在後續階段導入 Highlightr
+            // Reader: apply block styling + monospaced font; syntax highlighting is handled by Highlightr.
             let block = NSTextBlock()
             block.backgroundColor = theme.codeBackgroundColor
             block.setContentWidth(100, type: .percentageValueType)
@@ -210,7 +210,7 @@ struct ASTMarkdownRenderer {
                 .paragraphStyle: p
             ]
 
-            // 先渲染 code block（保留原始內容）
+            // Render the code block (keep the original text).
             if let hl = Self.highlightr {
                 hl.theme.setCodeFont(theme.monoFont)
                 _ = hl.setTheme(to: (NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua) ? "paraiso-dark" : "paraiso-light")
@@ -227,7 +227,7 @@ struct ASTMarkdownRenderer {
                 out.append(NSAttributedString(string: codeBlock.code + "\n", attributes: baseAttrs))
             }
 
-            // Mermaid：在 code block 下方額外插入 diagram（mermaid.ink；非阻塞載入）
+            // Mermaid: insert the diagram below the code block (mermaid.ink; non-blocking load).
             if let lang = codeBlock.language?.lowercased(), lang == "mermaid" {
                 if let diagram = MermaidRenderer.makeAttachment(code: codeBlock.code, theme: theme, maxWidth: nil) {
                     let dp = NSMutableParagraphStyle()
@@ -286,7 +286,7 @@ struct ASTMarkdownRenderer {
 
             let p = NSMutableParagraphStyle()
             
-            // Notes.app 風格：符號/數字縮排 + 文字對齊（tab stop + hanging indent）
+            // Notes.app style: prefix indent + aligned text (tab stop + hanging indent).
             let depthIndent = CGFloat(depth) * 16
             let bulletIndent: CGFloat = 14 + depthIndent
             let prefixWidth = (prefix as NSString).size(withAttributes: [.font: theme.paragraphFont]).width

@@ -1,5 +1,5 @@
 // MenuBuilder.swift
-// macOS Markdown Viewer - 選單建構元件
+// macOS Markdown Viewer - Menu construction
 
 import AppKit
 
@@ -20,22 +20,22 @@ class MenuBuilder {
     func buildMainMenu() -> NSMenu {
         let mainMenu = NSMenu()
         
-        // 應用程式選單
+        // Application menu
         mainMenu.addItem(buildAppMenu())
         
-        // 檔案選單
+        // File menu
         mainMenu.addItem(buildFileMenu())
         
-        // 編輯選單
+        // Edit menu
         mainMenu.addItem(buildEditMenu())
         
-        // 檢視選單
+        // View menu
         mainMenu.addItem(buildViewMenu())
         
-        // 視窗選單
+        // Window menu
         mainMenu.addItem(buildWindowMenu())
         
-        // 說明選單
+        // Help menu
         mainMenu.addItem(buildHelpMenu())
         
         return mainMenu
@@ -47,9 +47,9 @@ class MenuBuilder {
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
         
-        // 關於
+        // About
         let aboutItem = NSMenuItem(
-            title: "關於 Markdown Viewer",
+            title: "About Markdown Viewer",
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
             keyEquivalent: ""
         )
@@ -57,35 +57,35 @@ class MenuBuilder {
         
         appMenu.addItem(NSMenuItem.separator())
         
-        // 服務
-        let servicesItem = NSMenuItem(title: "服務", action: nil, keyEquivalent: "")
-        let servicesMenu = NSMenu(title: "服務")
+        // Services
+        let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: "Services")
         NSApp.servicesMenu = servicesMenu
         servicesItem.submenu = servicesMenu
         appMenu.addItem(servicesItem)
         
         appMenu.addItem(NSMenuItem.separator())
         
-        // 隱藏應用程式
+        // Hide app
         let hideItem = NSMenuItem(
-            title: "隱藏 Markdown Viewer",
+            title: "Hide Markdown Viewer",
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"
         )
         appMenu.addItem(hideItem)
         
-        // 隱藏其他
+        // Hide others
         let hideOthersItem = NSMenuItem(
-            title: "隱藏其他",
+            title: "Hide Others",
             action: #selector(NSApplication.hideOtherApplications(_:)),
             keyEquivalent: "h"
         )
         hideOthersItem.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(hideOthersItem)
         
-        // 顯示全部
+        // Show all
         let showAllItem = NSMenuItem(
-            title: "顯示全部",
+            title: "Show All",
             action: #selector(NSApplication.unhideAllApplications(_:)),
             keyEquivalent: ""
         )
@@ -93,9 +93,9 @@ class MenuBuilder {
         
         appMenu.addItem(NSMenuItem.separator())
         
-        // 結束
+        // Quit
         let quitItem = NSMenuItem(
-            title: "結束 Markdown Viewer",
+            title: "Quit Markdown Viewer",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -108,12 +108,12 @@ class MenuBuilder {
     // MARK: - File Menu
     
     private func buildFileMenu() -> NSMenuItem {
-        let fileMenuItem = NSMenuItem(title: "檔案", action: nil, keyEquivalent: "")
-        let fileMenu = NSMenu(title: "檔案")
+        let fileMenuItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
+        let fileMenu = NSMenu(title: "File")
         
-        // 開啟檔案
+        // Open
         let openItem = NSMenuItem(
-            title: "開啟...",
+            title: "Open…",
             action: #selector(AppDelegate.openFile),
             keyEquivalent: "o"
         )
@@ -122,9 +122,9 @@ class MenuBuilder {
         
         fileMenu.addItem(NSMenuItem.separator())
         
-        // 重新載入
+        // Reload
         let reloadItem = NSMenuItem(
-            title: "重新載入",
+            title: "Reload",
             action: #selector(AppDelegate.reloadCurrentFile),
             keyEquivalent: "r"
         )
@@ -133,9 +133,9 @@ class MenuBuilder {
         
         fileMenu.addItem(NSMenuItem.separator())
         
-        // 關閉視窗
+        // Close window
         let closeItem = NSMenuItem(
-            title: "關閉視窗",
+            title: "Close Window",
             action: #selector(NSWindow.performClose(_:)),
             keyEquivalent: "w"
         )
@@ -148,20 +148,20 @@ class MenuBuilder {
     // MARK: - Edit Menu
     
     private func buildEditMenu() -> NSMenuItem {
-        let editMenuItem = NSMenuItem(title: "編輯", action: nil, keyEquivalent: "")
-        let editMenu = NSMenu(title: "編輯")
+        let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: "Edit")
         
-        // 複製
+        // Copy
         let copyItem = NSMenuItem(
-            title: "複製",
+            title: "Copy",
             action: #selector(NSText.copy(_:)),
             keyEquivalent: "c"
         )
         editMenu.addItem(copyItem)
         
-        // 全選
+        // Select All
         let selectAllItem = NSMenuItem(
-            title: "全選",
+            title: "Select All",
             action: #selector(NSText.selectAll(_:)),
             keyEquivalent: "a"
         )
@@ -174,12 +174,12 @@ class MenuBuilder {
     // MARK: - View Menu
     
     private func buildViewMenu() -> NSMenuItem {
-        let viewMenuItem = NSMenuItem(title: "檢視", action: nil, keyEquivalent: "")
-        let viewMenu = NSMenu(title: "檢視")
+        let viewMenuItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
+        let viewMenu = NSMenu(title: "View")
         
-        // 進入全螢幕
+        // Enter Full Screen
         let fullScreenItem = NSMenuItem(
-            title: "進入全螢幕",
+            title: "Enter Full Screen",
             action: #selector(NSWindow.toggleFullScreen(_:)),
             keyEquivalent: "f"
         )
@@ -188,27 +188,27 @@ class MenuBuilder {
         
         viewMenu.addItem(NSMenuItem.separator())
         
-        // 放大
+        // Zoom In
         let zoomInItem = NSMenuItem(
-            title: "放大",
+            title: "Zoom In",
             action: #selector(AppDelegate.zoomIn),
             keyEquivalent: "+"
         )
         zoomInItem.target = appDelegate
         viewMenu.addItem(zoomInItem)
         
-        // 縮小
+        // Zoom Out
         let zoomOutItem = NSMenuItem(
-            title: "縮小",
+            title: "Zoom Out",
             action: #selector(AppDelegate.zoomOut),
             keyEquivalent: "-"
         )
         zoomOutItem.target = appDelegate
         viewMenu.addItem(zoomOutItem)
         
-        // 實際大小
+        // Actual Size
         let actualSizeItem = NSMenuItem(
-            title: "實際大小",
+            title: "Actual Size",
             action: #selector(AppDelegate.resetZoom),
             keyEquivalent: "0"
         )
@@ -217,19 +217,19 @@ class MenuBuilder {
         
         viewMenu.addItem(NSMenuItem.separator())
 
-        // 主題（Theme）
-        let themeItem = NSMenuItem(title: "主題", action: nil, keyEquivalent: "")
-        let themeMenu = NSMenu(title: "主題")
+        // Theme
+        let themeItem = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
+        let themeMenu = NSMenu(title: "Theme")
         
-        let themeSystem = NSMenuItem(title: "跟隨系統", action: #selector(AppDelegate.setThemeSystem), keyEquivalent: "")
+        let themeSystem = NSMenuItem(title: "System", action: #selector(AppDelegate.setThemeSystem), keyEquivalent: "")
         themeSystem.target = appDelegate
         themeMenu.addItem(themeSystem)
         
-        let themeLight = NSMenuItem(title: "淺色", action: #selector(AppDelegate.setThemeLight), keyEquivalent: "")
+        let themeLight = NSMenuItem(title: "Light", action: #selector(AppDelegate.setThemeLight), keyEquivalent: "")
         themeLight.target = appDelegate
         themeMenu.addItem(themeLight)
         
-        let themeDark = NSMenuItem(title: "深色", action: #selector(AppDelegate.setThemeDark), keyEquivalent: "")
+        let themeDark = NSMenuItem(title: "Dark", action: #selector(AppDelegate.setThemeDark), keyEquivalent: "")
         themeDark.target = appDelegate
         themeMenu.addItem(themeDark)
         
@@ -238,7 +238,7 @@ class MenuBuilder {
         
         viewMenu.addItem(NSMenuItem.separator())
 
-        // Native-only：不提供渲染器切換選單
+        // Native-only: no renderer switching menu
         
         viewMenuItem.submenu = viewMenu
         return viewMenuItem
@@ -247,20 +247,20 @@ class MenuBuilder {
     // MARK: - Window Menu
     
     private func buildWindowMenu() -> NSMenuItem {
-        let windowMenuItem = NSMenuItem(title: "視窗", action: nil, keyEquivalent: "")
-        let windowMenu = NSMenu(title: "視窗")
+        let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
+        let windowMenu = NSMenu(title: "Window")
         
-        // 最小化
+        // Minimize
         let minimizeItem = NSMenuItem(
-            title: "最小化",
+            title: "Minimize",
             action: #selector(NSWindow.performMiniaturize(_:)),
             keyEquivalent: "m"
         )
         windowMenu.addItem(minimizeItem)
         
-        // 縮放
+        // Zoom
         let zoomItem = NSMenuItem(
-            title: "縮放",
+            title: "Zoom",
             action: #selector(NSWindow.performZoom(_:)),
             keyEquivalent: ""
         )
@@ -268,9 +268,9 @@ class MenuBuilder {
         
         windowMenu.addItem(NSMenuItem.separator())
         
-        // 將全部移至最前
+        // Bring All to Front
         let bringAllToFrontItem = NSMenuItem(
-            title: "將全部移至最前",
+            title: "Bring All to Front",
             action: #selector(NSApplication.arrangeInFront(_:)),
             keyEquivalent: ""
         )
@@ -284,11 +284,11 @@ class MenuBuilder {
     // MARK: - Help Menu
     
     private func buildHelpMenu() -> NSMenuItem {
-        let helpMenuItem = NSMenuItem(title: "說明", action: nil, keyEquivalent: "")
-        let helpMenu = NSMenu(title: "說明")
+        let helpMenuItem = NSMenuItem(title: "Help", action: nil, keyEquivalent: "")
+        let helpMenu = NSMenu(title: "Help")
         
         let helpItem = NSMenuItem(
-            title: "Markdown Viewer 說明",
+            title: "Markdown Viewer Help",
             action: #selector(AppDelegate.showHelp),
             keyEquivalent: "?"
         )

@@ -1,12 +1,12 @@
 #!/usr/bin/env swift
 // test_runner.swift
-// macOS Markdown Viewer - 測試程式
+// macOS Markdown Viewer - Test runner
 
 import Foundation
 import Darwin
 import Compression
 
-// MARK: - 測試框架
+// MARK: - Test framework
 
 struct TestResult {
     let name: String
@@ -33,7 +33,7 @@ class TestRunner {
     
     func printSummary() {
         print("\n" + String(repeating: "=", count: 50))
-        print("測試結果: \(passed) 通過, \(failed) 失敗, 共 \(passed + failed) 個測試")
+        print("Test results: \(passed) passed, \(failed) failed, total \(passed + failed)")
         print(String(repeating: "=", count: 50))
     }
 }
@@ -71,7 +71,7 @@ func runProcess(_ executablePath: String, _ arguments: [String], timeoutSeconds:
         didTimeout = true
         task.terminate()
         
-        // 給 terminate 一點時間，若還不退出就 SIGKILL
+        // Give terminate a moment; if it's still running, SIGKILL.
         let killDeadline = Date().addingTimeInterval(0.5)
         while task.isRunning && Date() < killDeadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
@@ -81,7 +81,7 @@ func runProcess(_ executablePath: String, _ arguments: [String], timeoutSeconds:
         }
     }
     
-    // 等待結束（再給一點緩衝時間）
+    // Wait for exit (extra grace period)
     let exitDeadline = Date().addingTimeInterval(0.5)
     while task.isRunning && Date() < exitDeadline {
         RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
@@ -92,21 +92,21 @@ func runProcess(_ executablePath: String, _ arguments: [String], timeoutSeconds:
     return ProcessRunResult(terminationStatus: task.terminationStatus, output: output, didTimeout: didTimeout)
 }
 
-// MARK: - 檔案系統測試
+// MARK: - File system tests
 
 func testFileSystem(_ runner: TestRunner) {
-    print("\n📁 檔案系統測試")
+    print("\n📁 File system tests")
     print(String(repeating: "-", count: 40))
     
     let fm = FileManager.default
     let basePath = fm.currentDirectoryPath
     
-    // 測試 Sources 目錄存在
-    runner.run("Sources 目錄存在") {
+    // Sources directory exists
+    runner.run("Sources directory exists") {
         fm.fileExists(atPath: "\(basePath)/Sources")
     }
     
-    // 測試所有必要的 Swift 檔案
+    // All required Swift files exist
     let requiredFiles = [
         "Sources/main.swift",
         "Sources/AppDelegate.swift",
@@ -121,54 +121,54 @@ func testFileSystem(_ runner: TestRunner) {
     ]
     
     for file in requiredFiles {
-        runner.run("\(file) 存在") {
+        runner.run("\(file) exists") {
             fm.fileExists(atPath: "\(basePath)/\(file)")
         }
     }
     
-    // 測試可執行檔存在
-    runner.run("mdview 可執行檔存在") {
+    // Executable exists
+    runner.run("mdview executable exists") {
         fm.fileExists(atPath: "\(basePath)/mdview")
     }
     
-    // 測試 Fixtures/test.md 存在
-    runner.run("Fixtures/test.md 測試檔案存在") {
+    // Fixtures exist
+    runner.run("Fixtures/test.md exists") {
         fm.fileExists(atPath: "\(basePath)/Fixtures/test.md")
     }
 
-    runner.run("Fixtures/mermaid.md 測試檔案存在") {
+    runner.run("Fixtures/mermaid.md exists") {
         fm.fileExists(atPath: "\(basePath)/Fixtures/mermaid.md")
     }
     
-    // 測試 Makefile 存在
-    runner.run("Makefile 存在") {
+    // Makefile exists
+    runner.run("Makefile exists") {
         fm.fileExists(atPath: "\(basePath)/Makefile")
     }
     
-    // 測試 README.md 存在
-    runner.run("README.md 存在") {
+    // README exists
+    runner.run("README.md exists") {
         fm.fileExists(atPath: "\(basePath)/README.md")
     }
 }
 
-// MARK: - 檔案內容測試
+// MARK: - File content tests
 
 func testFileContents(_ runner: TestRunner) {
-    print("\n📄 檔案內容測試")
+    print("\n📄 File content tests")
     print(String(repeating: "-", count: 40))
     
     let basePath = FileManager.default.currentDirectoryPath
     
-    // 測試 main.swift 內容
-    runner.run("main.swift 包含 NSApplication") {
+    // main.swift content
+    runner.run("main.swift contains NSApplication") {
         guard let content = try? String(contentsOfFile: "\(basePath)/Sources/main.swift", encoding: .utf8) else {
             return false
         }
         return content.contains("NSApplication") && content.contains("AppDelegate")
     }
     
-    // 測試 AppDelegate.swift 內容
-    runner.run("AppDelegate.swift 包含必要元件") {
+    // AppDelegate.swift content
+    runner.run("AppDelegate.swift contains required components") {
         guard let content = try? String(contentsOfFile: "\(basePath)/Sources/AppDelegate.swift", encoding: .utf8) else {
             return false
         }
@@ -179,8 +179,8 @@ func testFileContents(_ runner: TestRunner) {
                content.contains("MenuBuilder")
     }
 
-    // WebKit 已移除：不應再有 MarkdownView.swift 或 import WebKit
-    runner.run("WebKit 相關檔案已移除") {
+    // WebKit removed: no MarkdownView.swift and no WebKit imports
+    runner.run("WebKit-related files are removed") {
         let fm = FileManager.default
         let removedFile = !fm.fileExists(atPath: "\(basePath)/Sources/MarkdownView.swift")
         let appDelegate = (try? String(contentsOfFile: "\(basePath)/Sources/AppDelegate.swift", encoding: .utf8)) ?? ""
@@ -196,42 +196,42 @@ func testFileContents(_ runner: TestRunner) {
             !package.contains("WebKit")
     }
     
-    // 測試 NativeMarkdownView.swift 內容
-    runner.run("NativeMarkdownView.swift 包含 NSTextView 原生渲染") {
+    // NativeMarkdownView.swift content
+    runner.run("NativeMarkdownView.swift uses NSTextView native rendering") {
         guard let content = try? String(contentsOfFile: "\(basePath)/Sources/NativeMarkdownView.swift", encoding: .utf8) else {
             return false
         }
         return content.contains("NSTextView") && content.contains("NSAttributedString") && content.contains("NativeCodeHighlighter")
     }
     
-    // 測試 FileHandler.swift 內容
-    runner.run("FileHandler.swift 包含檔案監控") {
+    // FileHandler.swift content
+    runner.run("FileHandler.swift includes file watching") {
         guard let content = try? String(contentsOfFile: "\(basePath)/Sources/FileHandler.swift", encoding: .utf8) else {
             return false
         }
         return content.contains("DispatchSource") && content.contains("readFile")
     }
     
-    // 測試 MenuBuilder.swift 內容
-    runner.run("MenuBuilder.swift 包含選單建構") {
+    // MenuBuilder.swift content
+    runner.run("MenuBuilder.swift builds menus") {
         guard let content = try? String(contentsOfFile: "\(basePath)/Sources/MenuBuilder.swift", encoding: .utf8) else {
             return false
         }
         return content.contains("NSMenu") && content.contains("buildMainMenu")
     }
     
-    // 測試 Fixtures/test.md 是有效的 Markdown
-    runner.run("Fixtures/test.md 包含有效 Markdown 語法") {
+    // Fixtures/test.md is valid Markdown
+    runner.run("Fixtures/test.md contains valid Markdown syntax") {
         guard let content = try? String(contentsOfFile: "\(basePath)/Fixtures/test.md", encoding: .utf8) else {
             return false
         }
-        return content.contains("# ") &&  // 標題
-               content.contains("```") &&  // 程式碼區塊
-               content.contains("- ") &&   // 列表
-               content.contains("|")       // 表格
+        return content.contains("# ") &&   // headings
+               content.contains("```") &&  // code fences
+               content.contains("- ") &&   // lists
+               content.contains("|")       // tables
     }
 
-    runner.run("Fixtures/mermaid.md 包含 mermaid fenced code block") {
+    runner.run("Fixtures/mermaid.md contains a mermaid fenced code block") {
         guard let content = try? String(contentsOfFile: "\(basePath)/Fixtures/mermaid.md", encoding: .utf8) else {
             return false
         }
@@ -239,10 +239,10 @@ func testFileContents(_ runner: TestRunner) {
     }
 }
 
-// MARK: - 編譯測試
+// MARK: - Compilation/runtime tests
 
 private func extractMermaidCodes(from markdown: String) -> [String] {
-    // 找所有 ```mermaid ... ``` 區塊並回傳內文（去除首尾空白/換行，對齊 MermaidRenderer 的行為）
+    // Extract all ```mermaid ...``` blocks and return their inner text (trim to match MermaidRenderer behavior).
     let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
     let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
 
@@ -287,33 +287,33 @@ private func base64URLDecodeToUTF8String(_ s: String) -> String? {
 }
 
 func testCompilation(_ runner: TestRunner) {
-    print("\n🔨 編譯測試")
+    print("\n🔨 Compilation/runtime tests")
     print(String(repeating: "-", count: 40))
     
-    // 測試可執行檔是否為有效的 Mach-O 二進制檔
-    runner.run("mdview 是有效的 Mach-O 執行檔") {
+    // mdview is a valid Mach-O executable
+    runner.run("mdview is a valid Mach-O executable") {
         let basePath = FileManager.default.currentDirectoryPath
-        // mdview 在 repo root 可能是 symlink（指向 .build 產物）；file 需用 -L 跟隨 symlink
+        // mdview at repo root may be a symlink (to .build product); `file` needs -L to follow it.
         let result = runProcess("/usr/bin/file", ["-L", "\(basePath)/mdview"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("Mach-O") && result.output.contains("executable")
     }
     
-    // 測試二進制檔連結的框架
-    runner.run("mdview 連結 AppKit 框架") {
+    // Linked frameworks
+    runner.run("mdview links AppKit framework") {
         let basePath = FileManager.default.currentDirectoryPath
         let result = runProcess("/usr/bin/otool", ["-L", "\(basePath)/mdview"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("AppKit")
     }
     
-    runner.run("mdview 不應連結 WebKit 框架") {
+    runner.run("mdview should not link WebKit framework") {
         let basePath = FileManager.default.currentDirectoryPath
         let result = runProcess("/usr/bin/otool", ["-L", "\(basePath)/mdview"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && !result.output.contains("WebKit")
     }
 
-    // 在某些自動化環境中（例如無 GUI session/WindowServer 或平台限制），
-    // AppKit 程式可能會被系統直接 SIGKILL（terminationStatus=9）。
-    // 但「直接跳過」會掩蓋本機回歸：因此預設採 FAIL，只有明確設定環境變數才允許 skip。
+    // In some automation environments (e.g. no GUI session/WindowServer or platform limitations),
+    // AppKit apps may be SIGKILL'ed by the system (terminationStatus=9).
+    // Skipping by default can hide local regressions, so we FAIL by default and only allow skipping via env var.
     let basePath = FileManager.default.currentDirectoryPath
     let allowSkipSubprocess = (ProcessInfo.processInfo.environment["MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS"] == "1")
 
@@ -321,11 +321,11 @@ func testCompilation(_ runner: TestRunner) {
     let canRunMdview = !probe.didTimeout && probe.terminationStatus == 0
     if !canRunMdview {
         if allowSkipSubprocess {
-            print("  ⚠️ 跳過 mdview 子行程測試（MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1）：status=\(probe.terminationStatus) timeout=\(probe.didTimeout)")
+            print("  ⚠️ Skipping mdview subprocess tests (MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1): status=\(probe.terminationStatus) timeout=\(probe.didTimeout)")
             return
         } else {
             runner.run(
-                "mdview 子行程可正常啟動（--help）",
+                "mdview subprocess can start (--help)",
                 test: { false },
                 message: "status=\(probe.terminationStatus) timeout=\(probe.didTimeout)"
             )
@@ -333,20 +333,20 @@ func testCompilation(_ runner: TestRunner) {
         }
     }
     
-    // GUI smoke test：確保從 CLI 啟動能建立視窗並自動退出
-    runner.run("mdview --smoke-test 可正常顯示 GUI 並退出") {
+    // GUI smoke test: ensure launching from CLI can create a window and exit automatically
+    runner.run("mdview --smoke-test shows GUI and exits") {
         let result = runProcess("\(basePath)/mdview", ["--smoke-test"], timeoutSeconds: 5.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SMOKE_OK")
     }
 
-    // 背景/子行程環境下，強制 activate 可能導致系統直接打死；因此提供 --no-activate 作保險。
-    runner.run("mdview --no-activate --smoke-test 可正常退出") {
+    // In background/subprocess environments, forcing activation can be killed; provide --no-activate as a safer path.
+    runner.run("mdview --no-activate --smoke-test exits cleanly") {
         let result = runProcess("\(basePath)/mdview", ["--no-activate", "--smoke-test"], timeoutSeconds: 5.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SMOKE_OK")
     }
 
-    // GUI screenshot test：確保能輸出 PNG
-    runner.run("mdview --screenshot 可輸出 PNG 並退出") {
+    // GUI screenshot test: ensure it can output a PNG
+    runner.run("mdview --screenshot outputs PNG and exits") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let out = tmpDir.appendingPathComponent("mdview-screenshot-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: out) }
@@ -366,8 +366,8 @@ func testCompilation(_ runner: TestRunner) {
         return size.intValue > 10_000
     }
 
-    // Blockquote 空行/段落間距：用純文字輸出做 deterministic regression
-    runner.run("mdview --render-text：blockquote 內 `>` 空行應產生段落分隔") {
+    // Blockquote blank lines / paragraph spacing: deterministic regression via plain-text output
+    runner.run("mdview --render-text: a blank `>` line in blockquote creates a paragraph break") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let tmpFile = tmpDir.appendingPathComponent("mdview-blockquote-spacing-\(UUID().uuidString).md")
         let markdown = """
@@ -387,16 +387,16 @@ func testCompilation(_ runner: TestRunner) {
         let result = runProcess("\(basePath)/mdview", ["--render-text", tmpFile.path], timeoutSeconds: 2.0)
         let output = result.output
 
-        // 期待：
-        // - line1 與 line2 間只有換行（同一段落內換行）
-        // - line2 與 author 間有一個空行（段落分隔）
+        // Expect:
+        // - line1 and line2 separated by a single newline (line break within the same paragraph)
+        // - line2 and author separated by a blank line (paragraph break)
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("line1\nline2\n\n— author") &&
                !output.contains("line1\n\nline2")
     }
 
-    // Screenshot + scroll-to：確保能穩定截到非首屏區塊（table/quote 等）
-    runner.run("mdview --screenshot-scroll-to 可捲動並輸出 PNG") {
+    // Screenshot + scroll-to: ensure it can reliably capture non-first-screen content (table/quote etc.)
+    runner.run("mdview --screenshot-scroll-to scrolls and outputs PNG") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let out = tmpDir.appendingPathComponent("mdview-screenshot-scroll-to-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: out) }
@@ -417,24 +417,24 @@ func testCompilation(_ runner: TestRunner) {
         return size.intValue > 10_000
     }
 
-    // CLI help：不應啟動 GUI，且應快速退出
-    runner.run("mdview --help 可正常退出並顯示使用說明") {
+    // CLI help: should not launch GUI and should exit quickly
+    runner.run("mdview --help exits and prints usage") {
         let result = runProcess("\(basePath)/mdview", ["--help"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("Usage:") && result.output.contains("--pipeline")
     }
 
-    // Native dump：驗證表格解析至少被觸發（避免「表格不出現」回歸）
-    runner.run("mdview --dump 可解析 Fixtures/test.md 的表格") {
+    // Native dump: ensure table parsing is triggered (avoid "table disappears" regression)
+    runner.run("mdview --dump parses the table in Fixtures/test.md") {
         let result = runProcess("\(basePath)/mdview", ["--dump", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
                output.contains("[[TABLE]]") &&
-               output.contains("功能") &&
-               output.contains("狀態") &&
-               output.contains("備註")
+               output.contains("Feature") &&
+               output.contains("Status") &&
+               output.contains("Notes")
     }
 
-    runner.run("mdview --dump 可偵測圖片語法") {
+    runner.run("mdview --dump detects image syntax") {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let tmpFile = tmpDir.appendingPathComponent("mdview-native-dump-image-test.md")
         let markdown = "![icon](./nonexistent.png)\n"
@@ -455,12 +455,12 @@ func testCompilation(_ runner: TestRunner) {
                output.contains("./nonexistent.png")
     }
 
-    // Mermaid.ink encoder：不依賴網路的 URL 形狀驗證（由 mdview --dump 產生）
-    runner.run("mdview --dump 會輸出 Mermaid diagram URL（mermaid.ink /svg/<base64url(text)>）") {
+    // Mermaid.ink encoder: validate URL shape without network (produced by mdview --dump)
+    runner.run("mdview --dump prints Mermaid diagram URL (mermaid.ink /svg/<base64url(text)>)") {
         let result = runProcess("\(basePath)/mdview", ["--dump", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         guard !result.didTimeout, result.terminationStatus == 0 else { return false }
 
-        // 期望有一行：[[MERMAID_URL]] https://mermaid.ink/svg/<base64url>?...
+        // Expect a line like: [[MERMAID_URL]] https://mermaid.ink/svg/<base64url>?...
         guard let line = result.output
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
@@ -472,19 +472,19 @@ func testCompilation(_ runner: TestRunner) {
         guard url.host == "mermaid.ink" else { return false }
         guard url.path.hasPrefix("/svg/") else { return false }
 
-        // base64url 僅允許 [A-Za-z0-9_-]，且不應包含 '=' 或空白
+        // base64url allows only [A-Za-z0-9_-] and should not contain '=' or whitespace.
         let payload = String(url.path.dropFirst("/svg/".count))
         guard !payload.isEmpty else { return false }
         guard !payload.contains("="), payload.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return false }
 
-        // 只允許 base64url 字元
+        // Only allow base64url characters.
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
         return payload.unicodeScalars.allSatisfy { allowed.contains($0) }
     }
 
-    // Mermaid：不依賴網路的 deterministic 驗證：
-    // 1) --render-text 內應包含 attachment 的 object replacement char（U+FFFC）
-    runner.run("mdview Mermaid fixture：--render-text 會包含 attachment placeholder（U+FFFC）") {
+    // Mermaid: deterministic checks without network:
+    // 1) --render-text should include attachment object replacement char (U+FFFC)
+    runner.run("mdview Mermaid fixture: --render-text contains attachment placeholder (U+FFFC)") {
         let fixture = "\(basePath)/Fixtures/mermaid.md"
         let result = runProcess("\(basePath)/mdview", ["--render-text", fixture], timeoutSeconds: 2.0)
         let output = result.output
@@ -493,8 +493,8 @@ func testCompilation(_ runner: TestRunner) {
                output.contains("\u{FFFC}")
     }
 
-    // 2) --dump 的 [[MERMAID_URL]] 可 round-trip 回原始 code（base64url decode + zlib inflate）
-    runner.run("mdview Mermaid fixture：mermaid.ink URL 可 round-trip 還原原始 code（含中文/多段）") {
+    // 2) [[MERMAID_URL]] from --dump can round-trip back to the original code (base64url decode)
+    runner.run("mdview Mermaid fixture: mermaid.ink URL round-trips back to original code") {
         let fixturePath = "\(basePath)/Fixtures/mermaid.md"
         guard let fixtureContent = try? String(contentsOfFile: fixturePath, encoding: .utf8) else { return false }
         let expectedCodes = extractMermaidCodes(from: fixtureContent)
@@ -517,17 +517,17 @@ func testCompilation(_ runner: TestRunner) {
             let payload = String(url.path.dropFirst("/svg/".count))
             guard let decoded = base64URLDecodeToUTF8String(payload) else { return false }
             
-            // 移除 MermaidRenderer 自動注入的 init directive（%%{init: ...}%%），比對原始 code
+            // Remove MermaidRenderer auto-injected init directive (%%{init: ...}%%) before comparing.
             let decodedTrimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
             let expectedCode = expectedCodes[idx]
             
-            // 若 decoded 包含 init directive，則將其移除後再比對
+            // If decoded includes an init directive, strip it before comparing.
             let codeWithoutInit: String
             if decodedTrimmed.hasPrefix("%%{init:") {
-                // 找到第一個 }%% 後的換行，取後面的內容
+                // Find the first "}%%" then take the content after it.
                 if let range = decodedTrimmed.range(of: "}%%") {
                     var afterInit = String(decodedTrimmed[range.upperBound...])
-                    // 移除開頭的換行
+                    // Remove leading newlines
                     while afterInit.hasPrefix("\n") {
                         afterInit.removeFirst()
                     }
@@ -547,52 +547,52 @@ func testCompilation(_ runner: TestRunner) {
         return true
     }
     
-    // Native render text：驗證 fenced code block 結束後，後續段落仍會被渲染（回歸：JS 區塊後面沒顯示）
-    runner.run("mdview --render-text 不會吃掉 fenced code block 後的內容") {
+    // Native render text: ensure content after a fenced code block is still rendered (regression: missing content after a code block)
+    runner.run("mdview --render-text does not drop content after a fenced code block") {
         let result = runProcess("\(basePath)/mdview", ["--render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         
-        // code block 後面 Fixtures/test.md 會出現「表格範例」「引用區塊」「待辦清單」
+        // After the code block, Fixtures/test.md should include "Table example", "Blockquote", "Task list"
         return !result.didTimeout && result.terminationStatus == 0 &&
-               output.contains("表格範例") &&
-               output.contains("引用區塊") &&
-               output.contains("待辦清單")
+               output.contains("Table example") &&
+               output.contains("Blockquote") &&
+               output.contains("Task list")
     }
 
-    // AST pipeline：至少應能啟動並在遇到 table/task/image 時自動 fallback（不應影響輸出）
-    runner.run("mdview --pipeline=ast --render-text 可正常輸出") {
+    // AST pipeline: should run and fall back on table/task/image (output should be unchanged)
+    runner.run("mdview --pipeline=ast --render-text outputs successfully") {
         let result = runProcess("\(basePath)/mdview", ["--pipeline=ast", "--render-text", "\(basePath)/Fixtures/test.md"], timeoutSeconds: 2.0)
         let output = result.output
         return !result.didTimeout && result.terminationStatus == 0 &&
-               output.contains("表格範例") &&
-               output.contains("引用區塊") &&
-               output.contains("待辦清單")
+               output.contains("Table example") &&
+               output.contains("Blockquote") &&
+               output.contains("Task list")
     }
 
-    // Native skeleton：驗證 NSTextView/NSScrollView 寬度骨架會正確同步（避免回歸成每字換行）
-    runner.run("mdview --skeleton-check 會回傳 SKELETON_OK") {
+    // Native skeleton: width skeleton regression check (avoid per-character wrapping)
+    runner.run("mdview --skeleton-check returns SKELETON_OK") {
         let result = runProcess("\(basePath)/mdview", ["--skeleton-check"], timeoutSeconds: 2.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("SKELETON_OK")
     }
 
-    // Highlightr：驗證 SPM resource bundle + JSCore 可正常使用
-    runner.run("mdview --highlightr-check 會回傳 HIGHLIGHTR_OK") {
+    // Highlightr: verify SPM resource bundle + JSCore works
+    runner.run("mdview --highlightr-check returns HIGHLIGHTR_OK") {
         let result = runProcess("\(basePath)/mdview", ["--highlightr-check"], timeoutSeconds: 4.0)
         return !result.didTimeout && result.terminationStatus == 0 && result.output.contains("HIGHLIGHTR_OK")
     }
 }
 
-// MARK: - FileHandler 單元測試
+// MARK: - FileHandler unit tests
 
 func testFileHandler(_ runner: TestRunner) {
-    print("\n📂 FileHandler 功能測試")
+    print("\n📂 FileHandler unit tests")
     print(String(repeating: "-", count: 40))
     
     let basePath = FileManager.default.currentDirectoryPath
     let testFilePath = "\(basePath)/Fixtures/test.md"
     
-    // 模擬 FileHandler 的檔案讀取邏輯
-    runner.run("讀取存在的檔案") {
+    // File read logic
+    runner.run("Read an existing file") {
         let url = URL(fileURLWithPath: testFilePath)
         do {
             let _ = try String(contentsOf: url, encoding: .utf8)
@@ -602,29 +602,29 @@ func testFileHandler(_ runner: TestRunner) {
         }
     }
     
-    runner.run("讀取不存在的檔案回傳 nil") {
+    runner.run("Reading a missing file throws") {
         let url = URL(fileURLWithPath: "/nonexistent/file.md")
         do {
             let _ = try String(contentsOf: url, encoding: .utf8)
-            return false  // 不應該成功
+            return false  // should not succeed
         } catch {
-            return true   // 應該拋出錯誤
+            return true   // should throw
         }
     }
     
-    runner.run("檢測 .md 副檔名") {
+    runner.run("Detect .md extension") {
         let path = "test.md"
         let ext = (path as NSString).pathExtension.lowercased()
         return ext == "md"
     }
     
-    runner.run("檢測 .markdown 副檔名") {
+    runner.run("Detect .markdown extension") {
         let path = "readme.markdown"
         let ext = (path as NSString).pathExtension.lowercased()
         return ext == "markdown"
     }
     
-    runner.run("解析相對路徑") {
+    runner.run("Resolve relative path") {
         let relativePath = "test.md"
         let absolutePath: String
         if relativePath.hasPrefix("/") {
@@ -635,7 +635,7 @@ func testFileHandler(_ runner: TestRunner) {
         return absolutePath.hasPrefix("/") && absolutePath.hasSuffix("test.md")
     }
     
-    runner.run("解析絕對路徑") {
+    runner.run("Resolve absolute path") {
         let absoluteInput = "/Users/test/file.md"
         let result: String
         if absoluteInput.hasPrefix("/") {
@@ -646,57 +646,57 @@ func testFileHandler(_ runner: TestRunner) {
         return result == "/Users/test/file.md"
     }
     
-    runner.run("取得檔案名稱") {
+    runner.run("Get file name") {
         let path = "/path/to/file.md"
         let filename = (path as NSString).lastPathComponent
         return filename == "file.md"
     }
     
-    runner.run("取得目錄路徑") {
+    runner.run("Get directory path") {
         let path = "/path/to/file.md"
         let directory = (path as NSString).deletingLastPathComponent
         return directory == "/path/to"
     }
 }
 
-// MARK: - Makefile 測試
+// MARK: - Makefile tests
 
 func testMakefile(_ runner: TestRunner) {
-    print("\n⚙️ Makefile 測試")
+    print("\n⚙️ Makefile tests")
     print(String(repeating: "-", count: 40))
     
     let basePath = FileManager.default.currentDirectoryPath
     
     guard let makefileContent = try? String(contentsOfFile: "\(basePath)/Makefile", encoding: .utf8) else {
-        runner.run("Makefile 可讀取") { false }
+        runner.run("Makefile is readable") { false }
         return
     }
     
-    runner.run("Makefile 定義 APP_NAME") {
+    runner.run("Makefile defines APP_NAME") {
         makefileContent.contains("APP_NAME")
     }
     
-    runner.run("Makefile 定義 SOURCES") {
+    runner.run("Makefile defines SOURCES") {
         makefileContent.contains("SOURCES")
     }
     
-    runner.run("Makefile 定義 debug 目標") {
+    runner.run("Makefile defines debug target") {
         makefileContent.contains("debug:")
     }
     
-    runner.run("Makefile 定義 release 目標") {
+    runner.run("Makefile defines release target") {
         makefileContent.contains("release:")
     }
     
-    runner.run("Makefile 定義 clean 目標") {
+    runner.run("Makefile defines clean target") {
         makefileContent.contains("clean:")
     }
     
-    runner.run("Makefile 包含 AppKit 框架") {
+    runner.run("Makefile links AppKit framework") {
         makefileContent.contains("-framework AppKit")
     }
     
-    runner.run("Makefile 不應包含 WebKit 框架") {
+    runner.run("Makefile should not link WebKit framework") {
         !makefileContent.contains("-framework WebKit")
     }
 }
@@ -706,7 +706,7 @@ func testMakefile(_ runner: TestRunner) {
 print("""
 
 ╔══════════════════════════════════════════════════╗
-║     macOS Markdown Viewer - 測試套件             ║
+║     macOS Markdown Viewer - Test Suite           ║
 ╚══════════════════════════════════════════════════╝
 """)
 
@@ -720,5 +720,5 @@ testMakefile(runner)
 
 runner.printSummary()
 
-// 回傳結束代碼
+// Return exit code
 exit(runner.failed > 0 ? 1 : 0)

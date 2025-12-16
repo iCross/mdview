@@ -1,11 +1,11 @@
 import AppKit
 import Foundation
 
-/// 單一 Markdown 文件視窗（window + renderer view + file watching）。
+/// A single Markdown document window (window + renderer view + file watching).
 ///
-/// 目標：
-/// - 支援多視窗（一次開多個檔案）
-/// - 將「開檔/重新載入/監控檔案變更/拖放」封裝在同一處
+/// Goals:
+/// - Support multiple windows (open multiple files at once)
+/// - Encapsulate "open/reload/watch file changes/drag & drop" in one place
 final class MarkdownWindowController: NSObject {
     private(set) var window: NSWindow
     private(set) var rendererView: (NSView & MarkdownRenderable)
@@ -13,7 +13,7 @@ final class MarkdownWindowController: NSObject {
 
     private(set) var currentFilePath: String?
 
-    /// 由 AppDelegate 設定，用來在視窗關閉時從集中管理列表移除。
+    /// Set by AppDelegate to remove this controller from the centralized list on window close.
     var onClose: ((MarkdownWindowController) -> Void)?
 
     init(
@@ -22,7 +22,7 @@ final class MarkdownWindowController: NSObject {
     ) {
         self.fileHandler = FileHandler()
 
-        // 先建立 window（確保視窗一定可顯示）
+        // Create the window first (ensure it can always be shown)
         let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
         let targetWidth: CGFloat = min(visibleFrame.width, min(1200, max(900, visibleFrame.width * 0.8)))
         let targetHeight: CGFloat = min(visibleFrame.height, max(700, visibleFrame.height * 0.95))
@@ -85,7 +85,7 @@ final class MarkdownWindowController: NSObject {
     func loadMarkdownFile(path: String) {
         let absolutePath = fileHandler.resolveAbsolutePath(path)
         guard let content = fileHandler.readFile(at: absolutePath) else {
-            showError("無法讀取檔案: \(absolutePath)")
+            showError("Failed to read file: \(absolutePath)")
             return
         }
 
@@ -109,10 +109,10 @@ final class MarkdownWindowController: NSObject {
 
     private func showError(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "錯誤"
+        alert.messageText = "Error"
         alert.informativeText = message
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "確定")
+        alert.addButton(withTitle: "OK")
         alert.runModal()
     }
 }

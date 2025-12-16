@@ -1,5 +1,5 @@
 // FileHandler.swift
-// macOS Markdown Viewer - 檔案處理元件
+// macOS Markdown Viewer - File handling component
 
 import Foundation
 
@@ -35,7 +35,7 @@ class FileHandler {
             let content = try String(contentsOf: url, encoding: .utf8)
             return content
         } catch {
-            print("讀取檔案錯誤: \(error.localizedDescription)")
+            print("Failed to read file: \(error.localizedDescription)")
             return nil
         }
     }
@@ -43,14 +43,14 @@ class FileHandler {
     // MARK: - File Watching
     
     func startWatching(path: String) {
-        // 停止之前的監控
+        // Stop any previous watch
         stopWatching()
         
         watchingPath = path
         fileDescriptor = open(path, O_EVTONLY)
         
         guard fileDescriptor != -1 else {
-            print("無法開啟檔案進行監控: \(path)")
+            print("Unable to open file for watching: \(path)")
             return
         }
         
@@ -66,10 +66,10 @@ class FileHandler {
             let flags = source.data
             
             if flags.contains(.delete) || flags.contains(.rename) {
-                // 檔案被刪除或重新命名，嘗試重新建立監控
+                // File deleted or renamed; try to re-establish the watch.
                 self.stopWatching()
                 
-                // 稍後重試（檔案可能正在被編輯器重新寫入）
+                // Retry later (some editors rewrite files atomically).
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
                     if FileManager.default.fileExists(atPath: path) {
                         self?.startWatching(path: path)
@@ -91,7 +91,7 @@ class FileHandler {
         dispatchSource = source
         source.resume()
         
-        print("開始監控檔案: \(path)")
+        print("Started watching file: \(path)")
     }
     
     func stopWatching() {

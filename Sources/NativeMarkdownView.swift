@@ -1,5 +1,5 @@
 // NativeMarkdownView.swift
-// macOS Markdown Viewer - 原生 NSTextView 渲染元件
+// macOS Markdown Viewer - Native NSTextView renderer
 
 import AppKit
 import Foundation
@@ -11,8 +11,8 @@ enum NativeMarkdownPipeline: String {
     case ast = "ast"
 }
 
-/// 使用 NSTextView 以 NSAttributedString 呈現 Markdown。
-/// 設計目標：較低常駐成本、快速啟動、無 HTML/JS 渲染依賴。
+/// Render Markdown using NSTextView with NSAttributedString.
+/// Design goals: low resident cost, fast startup, no HTML/JS rendering dependency.
 final class NativeMarkdownView: NSView, MarkdownRenderable {
     
     // MARK: - Properties
@@ -96,16 +96,16 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         scrollView.documentView = textView
         addSubview(scrollView)
 
-        // 讓內容寬度跟著 view（原生閱讀器的自然換行）
+        // Track content width with the view (natural wrapping for a native reader).
         if let container = textView.textContainer {
             container.widthTracksTextView = true
             container.heightTracksTextView = false
             container.containerSize = NSSize(width: bounds.width, height: CGFloat.greatestFiniteMagnitude)
-            // Notes 風格：避免 TextKit 預設 padding 影響左右邊界（我們用 textContainerInset 控制）
+            // Notes-like: avoid TextKit's default padding affecting edges (we control margins via textContainerInset).
             container.lineFragmentPadding = 0
         }
         
-        // 關鍵：documentView（NSTextView）需要有初始尺寸，否則可能變成極小寬度導致每字換行
+        // Critical: documentView (NSTextView) needs an initial size; otherwise width can become tiny and wrap per character.
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.setFrameSize(scrollView.contentView.bounds.size)
@@ -153,7 +153,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            // 保守策略：外連圖片載入完成後，觸發一次 attributes edited + layout 以更新顯示。
+            // Conservative strategy: after remote images load, trigger an attributes-edited pass + layout to refresh display.
             if let storage = self.textView.textStorage {
                 let full = NSRange(location: 0, length: storage.length)
                 storage.edited(.editedAttributes, range: full, changeInLength: 0)
@@ -165,14 +165,14 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     }
     
     private func syncTextContainerWidth() {
-        // 以 scrollView 可視內容寬度為準，避免 code block/table 變成「一個字寬」。
-        // 注意：用 contentSize 比 bounds 更貼近實際可用寬度（會排除 scroller 佔用等）。
+        // Use the scrollView visible content width to avoid code blocks/tables becoming "one character wide".
+        // Note: contentSize is closer to the actual usable width than bounds (excludes scroller occupancy, etc.).
         let visibleWidth = scrollView.contentSize.width
         let insetWidth = textView.textContainerInset.width
         let containerWidth = max(1, visibleWidth - insetWidth * 2)
         guard containerWidth > 1 else { return }
         
-        // 讓 textView 本身也有合理寬度
+        // Keep the textView itself at a reasonable width.
         var frame = textView.frame
         if abs(frame.width - visibleWidth) > 0.5 {
             frame.size.width = visibleWidth
@@ -183,7 +183,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
             container.containerSize = NSSize(width: containerWidth, height: CGFloat.greatestFiniteMagnitude)
             container.widthTracksTextView = true
             
-            // 強制讓 layout manager 重新依新幾何排版（修正「變寬了但還是每字換行」的殘留狀態）
+            // Force the layout manager to reflow with new geometry (fix "it got wider but still wraps per character").
             textView.layoutManager?.textContainerChangedGeometry(container)
         }
     }
@@ -212,16 +212,16 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
             attributed = NativeMarkdownParser(theme: theme, baseURL: baseURL, maxTableWidth: maxTableWidth).render(markdown: content)
         }
         
-        // 將結果塞入 textStorage
+        // Put the result into textStorage
         textView.textStorage?.setAttributedString(attributed)
 
-        // 確保第一次渲染就以正確容器寬度 reflow（table/code block 常在這裡回歸）
+        // Ensure the first render reflows with the correct container width (tables/code blocks often regress here).
         syncTextContainerWidth()
         if let container = textView.textContainer {
             textView.layoutManager?.ensureLayout(for: container)
         }
         
-        // 將游標回到頂端
+        // Scroll to top
         textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
     }
     
@@ -233,13 +233,13 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         let welcome = """
         # Markdown Viewer
         
-        一個簡潔的 macOS Markdown 檢視器（原生渲染模式）。
+        A lightweight macOS Markdown viewer (native rendering).
         
-        ## 開始使用
+        ## Getting started
         
-        - 拖放 `.md` / `.markdown` 檔案到此視窗
-        - 或使用選單 `File → Open` 開啟檔案
-        - 或使用命令列：`./mdview path/to/file.md`
+        - Drag and drop a `.md` / `.markdown` file into this window
+        - Or use the menu `File → Open…` to open a file
+        - Or use the command line: `./mdview path/to/file.md`
         """
         
         let maxTableWidth = textView.textContainer?.containerSize.width
@@ -311,7 +311,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
     
     // MARK: - CLI debug / tests
     
-    /// 不啟動 GUI 的情況下輸出可測試的解析結果（供 `--dump` 使用）。
+    /// Print testable parse/debug output without launching the GUI (used by `--dump`).
     static func debugDump(markdown: String) -> String {
         let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
@@ -323,7 +323,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         var codeBuffer: [String] = []
         var i = 0
         while i < lines.count {
-            // fenced code block（debug 用：保留原文，並在 mermaid fence 結束後額外輸出 diagram URL）
+            // Fenced code block (debug): keep original text; for mermaid fences, also emit a diagram URL after closing.
             let line = lines[i]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("```") {
@@ -332,13 +332,13 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
                     out.append(line)
                     if codeFenceLanguage == "mermaid" {
                         let code = codeBuffer.joined(separator: "\n")
-                        // 保持舊格式（向後兼容測試）
+                        // Keep legacy format (backward-compatible with tests).
                         if let url = MermaidRenderer.makeDiagramURL(code: code, appearance: nil) {
                             out.append("[[MERMAID_URL]] \(url.absoluteString)")
                         } else {
                             out.append("[[MERMAID_URL]] (invalid)")
                         }
-                        // 額外輸出對比資訊（方便使用者查看原版）
+                        // Also emit comparison info (useful for manual inspection).
                         if let comparison = MermaidRenderer.makeDiagramURLComparison(code: code, appearance: nil) {
                             out.append("[[MERMAID_URL_COMPARISON]]")
                             out.append(comparison)
@@ -392,7 +392,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         return out.joined(separator: "\n")
     }
     
-    /// 不啟動 GUI 的情況下輸出渲染後的純文字（用於驗證 fenced code block 後續內容不會被吃掉）。
+    /// Print rendered plain text without launching the GUI (used to verify content after fenced code blocks isn't dropped).
     static func debugRenderPlainText(markdown: String, pipeline: NativeMarkdownPipeline = .regex) -> String {
         let theme = NativeMarkdownTheme(zoom: 1.0)
         let attributed: NSAttributedString
@@ -401,21 +401,21 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         } else {
             attributed = NativeMarkdownParser(theme: theme, baseURL: nil, maxTableWidth: nil).render(markdown: markdown)
         }
-        // 渲染器內部可能使用 U+2028（line separator）避免段落間距問題；
-        // debug/測試輸出時統一轉回 "\n" 以便做字串比對與在 terminal 觀察。
+        // The renderer may use U+2028 (line separator) to avoid paragraph-spacing issues.
+        // For debug/tests, normalize back to "\n" for string comparisons and terminal inspection.
         return attributed.string.replacingOccurrences(of: "\u{2028}", with: "\n")
     }
 
-    /// 不啟動 GUI 的情況下驗證 NSTextView/NSScrollView 寬度骨架是否正常（供 `--skeleton-check` 使用）。
-    /// 目標：避免回歸成「每字換行」（通常是 text container 寬度被錯誤同步成極小值）。
+    /// Verify NSTextView/NSScrollView width skeleton without launching the GUI (used by `--skeleton-check`).
+    /// Goal: prevent regressions to per-character wrapping (often caused by the text container width being synced to a tiny value).
     static func debugSkeletonCheck() -> String {
-        // 保守起見先初始化 NSApplication（即使不進 event loop）
+        // Initialize NSApplication for safety (even if we don't enter the event loop).
         _ = NSApplication.shared
 
         let view = NativeMarkdownView(frame: NSRect(x: 0, y: 0, width: 900, height: 700))
         view.loadWelcomePage()
 
-        // 模擬縮放視窗寬度（常見觸發點：scrollbar/clipView bounds 變化）
+        // Simulate window width changes (common trigger: scrollbar/clipView bounds changes).
         let widths: [CGFloat] = [900, 600, 360, 820]
         var rows: [String] = []
 
@@ -432,7 +432,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
 
             rows.append(String(format: "width=%.0f visible=%.2f inset=%.2f expected=%.2f actual=%.2f", w, visibleWidth, insetWidth, expected, actual))
 
-            // 容忍少量誤差（浮點/布局時序）
+            // Allow small tolerance (floating point/layout timing).
             if !(actual > 50 && abs(actual - expected) < 3.0) {
                 ok = false
             }
@@ -447,8 +447,8 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
 
     // MARK: - Screenshot helpers (for AppDelegate automation)
 
-    /// 捲到第一個包含指定文字的位置（供 `--screenshot-scroll-to` 使用）。
-    /// - Returns: 是否找到並捲動成功
+    /// Scroll to the first occurrence of the given text (used by `--screenshot-scroll-to`).
+    /// - Returns: Whether the text was found and scrolling succeeded
     func scrollToFirstOccurrence(of text: String) -> Bool {
         let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return false }
@@ -460,7 +460,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         return true
     }
 
-    /// 捲到指定 y offset（點數；以「文件頂端」為 0）。
+    /// Scroll to a y offset in points (0 = top of document).
     func scrollTo(y: CGFloat) {
         let doc = scrollView.documentView ?? textView
         let viewportHeight = scrollView.contentSize.height
@@ -471,7 +471,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         if doc.isFlipped {
             targetY = min(requested, maxOffset)
         } else {
-            // 若座標系非 flipped，將「從頂端起算」轉成「從底端起算」
+            // If the coordinate system is not flipped, convert "from top" to "from bottom".
             targetY = min(max(0, maxOffset - requested), maxOffset)
         }
 
@@ -479,10 +479,10 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
-    /// 取得「整份文件內容」用於 full-page screenshot 的 view（documentView）。
-    /// 目前回傳 NSTextView 本身（其 frame 高度會隨內容成長）。
+    /// Return the view used for full-page screenshots (documentView).
+    /// Currently returns the NSTextView itself (its frame height grows with content).
     func viewForFullScreenshot() -> NSView {
-        // 先確保 layout 完整，並把 textView 的高度拉到足夠容納內容（避免只截到首屏）。
+        // Ensure layout is complete and expand textView height to fit the full content (avoid capturing only the first screen).
         if let container = textView.textContainer, let lm = textView.layoutManager {
             lm.ensureLayout(for: container)
             let used = lm.usedRect(for: container)
@@ -505,7 +505,7 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
 struct NativeMarkdownTheme {
     let zoom: Double
     
-    // 基本文字尺寸（會乘上 zoom）
+    // Base font sizes (multiplied by zoom).
     var baseFontSize: CGFloat { CGFloat(16.0 * zoom) }
     var codeFontSize: CGFloat { CGFloat(13.5 * zoom) }
     
@@ -528,12 +528,12 @@ struct NativeMarkdownTheme {
     
     var monoFont: NSFont { NSFont.monospacedSystemFont(ofSize: codeFontSize, weight: .regular) }
     
-    /// inline code 用：跟隨當下文字大小（避免在標題/大字時 inline code 看起來特別小）
+    /// For inline code: follow the current font size (avoid inline code looking tiny in headings/large text).
     func monoFont(ofSize size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         NSFont.monospacedSystemFont(ofSize: size, weight: weight)
     }
 
-    // Notes 風格 paragraph style（Reader 為主：一致行高、段落間距）
+    // Notes-like paragraph style (reader-focused: consistent line height and paragraph spacing).
     var baseParagraphStyle: NSParagraphStyle {
         let p = NSMutableParagraphStyle()
         p.lineHeightMultiple = 1.22
@@ -547,7 +547,7 @@ struct NativeMarkdownTheme {
 
     func headingParagraphStyle(level: Int) -> NSParagraphStyle {
         let p = baseParagraphStyle.mutableCopy() as! NSMutableParagraphStyle
-        // 標題：讓上下更有呼吸感
+        // Headings: add a bit more breathing room.
         switch level {
         case 1:
             p.paragraphSpacing = 12
@@ -559,7 +559,7 @@ struct NativeMarkdownTheme {
         return p
     }
     
-    // 動態色彩（自動跟隨深色/淺色）
+    // Dynamic colors (follow light/dark appearance).
     var textColor: NSColor { .textColor }
     var secondaryTextColor: NSColor { .secondaryLabelColor }
     var linkColor: NSColor { .linkColor }
@@ -575,17 +575,17 @@ struct NativeMarkdownTheme {
 
 // MARK: - Parser / Renderer
 
-/// 極簡 Markdown 轉 NSAttributedString：
-/// - 支援：標題、段落、引用、列表、待辦、水平線、inline code、粗體/斜體/刪除線、連結、fenced code block（含簡易 regex 上色）
+/// Minimal Markdown → NSAttributedString renderer:
+/// - Supports: headings, paragraphs, blockquotes, lists, tasks, horizontal rules, inline code, bold/italic/strikethrough, links, fenced code blocks (with basic regex highlighting)
 private final class NativeMarkdownParser {
     
     private let theme: NativeMarkdownTheme
     private let baseURL: URL?
-    /// Native table 的最大寬度（點數）。若 nil，使用保守預設值。
-    /// - 目的：小表格可依內容寬度顯示；遇到超寬內容時避免變成超大 table（改以換行/自動佈局處理）。
+    /// Max width for native tables (in points). If nil, use a conservative default.
+    /// - Purpose: small tables can size to content; very wide content shouldn't create a massive table (wrap/auto-layout instead).
     private let maxTableWidth: CGFloat?
     
-    // 自訂屬性：用來避免在 code span 內再套用粗體/斜體等規則
+    // Custom attribute: used to avoid applying bold/italic rules inside code spans.
     private static let isCodeAttribute = NSAttributedString.Key("NativeMarkdownIsCode")
     
     init(theme: NativeMarkdownTheme, baseURL: URL?, maxTableWidth: CGFloat? = nil) {
@@ -612,7 +612,7 @@ private final class NativeMarkdownParser {
                 .paragraphStyle: theme.baseParagraphStyle
             ]
             output.append(formatInline(text, baseAttributes: attrs))
-            // 段落間距由 paragraphStyle 的 paragraphSpacing 控制，這裡只加單一換行
+            // Paragraph spacing is controlled by paragraphStyle.paragraphSpacing; only append a single newline here.
             output.append(NSAttributedString(string: "\n"))
         }
         
@@ -638,7 +638,7 @@ private final class NativeMarkdownParser {
                     inCodeFence = false
                     codeFenceLanguage = ""
                     codeBuffer.removeAll(keepingCapacity: true)
-                    // 重要：吃掉這一行 closing fence，否則會被下一輪當成 opening fence
+                    // Important: consume the closing fence line; otherwise the next loop may treat it as an opening fence.
                     i += 1
                     continue
                 } else {
@@ -657,14 +657,14 @@ private final class NativeMarkdownParser {
                 continue
             }
             
-            // 空行：結束段落
+            // Blank line: end the paragraph
             if trimmed.isEmpty {
                 flushPendingParagraph()
                 i += 1
                 continue
             }
             
-            // 水平線
+            // Horizontal rule
             if trimmed == "---" || trimmed == "----" || trimmed == "-----" {
                 flushPendingParagraph()
                 output.append(renderHorizontalRule())
@@ -673,7 +673,7 @@ private final class NativeMarkdownParser {
                 continue
             }
             
-            // 標題（# ~ ######）
+            // Heading (# ~ ######)
             if let heading = parseHeading(line) {
                 flushPendingParagraph()
                 output.append(renderHeading(level: heading.level, text: heading.text))
@@ -682,7 +682,7 @@ private final class NativeMarkdownParser {
                 continue
             }
             
-            // 引用（>）：以 block-level 解析連續 quote 行，避免「一行一個 block」導致 paragraphSpacing 疊加
+            // Blockquote (>): parse consecutive quote lines as a block to avoid per-line blocks stacking paragraphSpacing.
             if looksLikeBlockquoteStart(line) {
                 flushPendingParagraph()
                 let (quoteText, consumed) = parseBlockquoteBlock(from: lines, startIndex: i)
@@ -694,7 +694,7 @@ private final class NativeMarkdownParser {
                 continue
             }
 
-            // 表格（GitHub-style pipe table）
+            // Table (GitHub-style pipe table)
             if i + 1 < lines.count, looksLikeTableHeader(lines[i], separatorLine: lines[i + 1]) {
                 flushPendingParagraph()
                 let (table, consumed) = parseTable(from: lines, startIndex: i)
@@ -704,7 +704,7 @@ private final class NativeMarkdownParser {
                 continue
             }
             
-            // 待辦清單 / 無序清單（支援多級縮排）
+            // Task list / unordered list (supports multi-level indentation)
             if let task = parseTaskListItem(line) {
                 flushPendingParagraph()
                 output.append(renderListItem(prefix: task.checked ? "☑︎" : "☐", text: task.text, depth: task.depth))
@@ -720,17 +720,17 @@ private final class NativeMarkdownParser {
                 continue
             }
             
-            // 有序清單（1.）
+            // Ordered list (1.)
             if let ordered = parseOrderedListItem(line) {
                 flushPendingParagraph()
-                // ordered list：用 "." + tab 做對齊（類似 Notes）
+                // Ordered list: align with "." + tab (Notes-like).
                 output.append(renderListItem(prefix: "\(ordered.index).", text: ordered.text, depth: ordered.depth))
                 output.append(NSAttributedString(string: "\n"))
                 i += 1
                 continue
             }
             
-            // 其他：累積成段落
+            // Other: accumulate into a paragraph
             pendingParagraphLines.append(line)
             i += 1
         }
@@ -738,7 +738,7 @@ private final class NativeMarkdownParser {
         // flush remaining
         flushPendingParagraph()
         
-        // 若文件以列表結尾，避免多餘的尾端空白：保留即可（textView 可接受）
+        // If the document ends with a list, avoid extra trailing whitespace; leaving it is fine (NSTextView tolerates it).
         return output
     }
     
@@ -770,13 +770,13 @@ private final class NativeMarkdownParser {
 
             var rest = trimmed.dropFirst()
             if rest.first == " " { rest = rest.dropFirst() }
-            let content = String(rest) // 可能是空字串（對應 `>` 空行）
+            let content = String(rest) // may be an empty string (corresponds to a `>` blank line)
             quoteLines.append(content)
             i += 1
         }
 
-        // 正規化：同一段落內用 U+2028（line separator）串接，避免被當成新 paragraph；
-        // `>` 空行代表段落分隔，段落間用 \n\n。
+        // Normalize: within the same paragraph, join lines using U+2028 (line separator) so they aren't treated as new paragraphs.
+        // A `>` blank line represents a paragraph break; separate paragraphs with \n\n.
         var paragraphs: [String] = []
         var current: [String] = []
         var sawBlank = false
@@ -803,9 +803,9 @@ private final class NativeMarkdownParser {
     }
     
     private func listIndentDepth(_ line: String) -> Int {
-        // 以「顯示縮排」為目標的簡化 nested list 支援：
-        // - 空白 2 個算一層（可支援很多級）
-        // - tab 視為 4 spaces
+        // Simplified nested list support focused on "visual indentation":
+        // - 2 spaces per level (supports many levels)
+        // - tab counts as 4 spaces
         var spaces = 0
         for ch in line {
             if ch == " " {
@@ -848,7 +848,7 @@ private final class NativeMarkdownParser {
     }
     
     private func parseOrderedListItem(_ line: String) -> (depth: Int, index: Int, text: String)? {
-        // "1. text"（含縮排）
+        // "1. text" (with indentation)
         let depth = listIndentDepth(line)
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard let dotIndex = trimmed.firstIndex(of: ".") else { return nil }
@@ -872,10 +872,10 @@ private final class NativeMarkdownParser {
     }
     
     private func renderBlockquote(_ text: String) -> NSAttributedString {
-        // 用 NSTextBlock 做出原生的「引用區塊」視覺（左邊框 + padding）
+        // Use NSTextBlock for native blockquote styling (left border + padding).
         let block = NSTextBlock()
         block.backgroundColor = NSColor.clear
-        // 重要：讓 block 吃滿可用寬度（否則預設可能導致寬度極小）
+        // Important: make the block fill available width (otherwise it can become extremely narrow).
         block.setContentWidth(100, type: .percentageValueType)
         block.setWidth(10, type: .absoluteValueType, for: .padding)
         block.setWidth(3, type: .absoluteValueType, for: .border, edge: .minX)
@@ -894,7 +894,7 @@ private final class NativeMarkdownParser {
         ]
         
         let out = NSMutableAttributedString(attributedString: formatInline(text, baseAttributes: attrs))
-        // 確保全文（含 \n）都套用 blockquote paragraphStyle
+        // Ensure the entire string (including \n) uses the blockquote paragraphStyle.
         if out.length > 0 {
             out.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: out.length))
         }
@@ -903,9 +903,9 @@ private final class NativeMarkdownParser {
     
     private func renderListItem(prefix: String, text: String, depth: Int = 0) -> NSAttributedString {
         let paragraphStyle = NSMutableParagraphStyle()
-        // Notes.app 風格：用 tab stop 做出「符號/數字在左、文字統一對齊」的 hanging indent。
-        // - prefix 後用 \t
-        // - text 從 tab stop 開始
+        // Notes.app style: use a tab stop to create a hanging indent with prefix on the left and aligned text.
+        // - prefix then \t
+        // - text starts from the tab stop
         let d = min(20, max(0, depth))
         let depthIndent = CGFloat(d) * 16
         let bulletIndent: CGFloat = 14 + depthIndent
@@ -913,9 +913,9 @@ private final class NativeMarkdownParser {
         let minTextIndent: CGFloat = 32 + depthIndent
         let textIndent = max(minTextIndent, bulletIndent + prefixWidth + 12)
         
-        // 第一行（符號/數字）先縮排到 bulletIndent；文字用 tab 跳到 textIndent。
+        // First line: indent prefix to bulletIndent; use tab to jump text to textIndent.
         paragraphStyle.firstLineHeadIndent = bulletIndent
-        // 換行後的內容對齊文字起始（hanging indent）
+        // Subsequent lines align with text start (hanging indent).
         paragraphStyle.headIndent = textIndent
         paragraphStyle.tabStops = [
             NSTextTab(textAlignment: .left, location: textIndent, options: [:])
@@ -931,7 +931,7 @@ private final class NativeMarkdownParser {
             .paragraphStyle: paragraphStyle
         ]
         
-        // prefix 不要帶尾端空白，改由 \t 讓文字對齊 tab stop
+        // Don't include trailing spaces in prefix; use \t so the text aligns to the tab stop.
         let out = NSMutableAttributedString(string: "\(prefix)\t", attributes: base)
         out.append(formatInline(text, baseAttributes: base))
         return out
@@ -954,10 +954,10 @@ private final class NativeMarkdownParser {
     private func renderCodeBlock(_ code: String, language: String) -> NSAttributedString {
         let lang = language.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        // 用 NSTextBlock 做出原生的 code block（背景 + padding + 邊框）
+        // Use NSTextBlock for a native code block (background + padding + border).
         let block = NSTextBlock()
         block.backgroundColor = theme.codeBackgroundColor
-        // 重要：讓 block 吃滿可用寬度（避免每字換行的「一個字寬」code block）
+        // Important: make the block fill available width (avoid a "one character wide" code block).
         block.setContentWidth(100, type: .percentageValueType)
         block.setWidth(10, type: .absoluteValueType, for: .padding)
         block.setWidth(1, type: .absoluteValueType, for: .border)
@@ -975,7 +975,7 @@ private final class NativeMarkdownParser {
             .paragraphStyle: paragraphStyle
         ]
 
-        // 優先使用 Highlightr（highlight.js via JavaScriptCore）；失敗再 fallback 到 regex。
+        // Prefer Highlightr (highlight.js via JavaScriptCore); fall back to regex on failure.
         let codeOut: NSMutableAttributedString
         if let highlighted = NativeHighlightr.highlight(code: code, languageHint: language, theme: theme) {
             codeOut = NSMutableAttributedString(attributedString: highlighted)
@@ -985,12 +985,12 @@ private final class NativeMarkdownParser {
             NativeCodeHighlighter.applyRegexHighlight(to: codeOut, languageHint: language, theme: theme)
         }
         
-        // 標示成 code（避免後續 inline 規則覆蓋）
+        // Mark as code (avoid later inline rules overriding it).
         let codeRange = NSRange(location: 0, length: codeOut.length)
         codeOut.addAttribute(Self.isCodeAttribute, value: true, range: codeRange)
         codeOut.addAttribute(.paragraphStyle, value: paragraphStyle, range: codeRange)
 
-        // Mermaid：保留 code block，並在下方額外插入 diagram（mermaid.ink；非阻塞載入）
+        // Mermaid: keep the code block and insert a diagram below (mermaid.ink; non-blocking load).
         let out = NSMutableAttributedString(attributedString: codeOut)
         if lang == "mermaid" {
             let maxW = maxTableWidth
@@ -1094,7 +1094,7 @@ private final class NativeMarkdownParser {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { break }
             if !trimmed.contains("|") { break }
-            // 若遇到明顯是其他語法（例如 list），就停
+            // If we hit another syntax (e.g. a list), stop table parsing.
             if parseTaskListItem(line) != nil || parseBulletListItem(line) != nil || parseOrderedListItem(line) != nil {
                 break
             }
@@ -1107,7 +1107,7 @@ private final class NativeMarkdownParser {
     }
 
     private func splitTableRow(_ line: String) -> [String] {
-        // 支援兩種：
+        // Supports:
         // - | a | b |
         // - a | b
         var s = line.trimmingCharacters(in: .whitespaces)
@@ -1120,31 +1120,31 @@ private final class NativeMarkdownParser {
     }
 
     private func renderTable(_ table: ParsedTable) -> NSAttributedString {
-        // 使用 NSTextTable/NSTextTableBlock 產生真正的 table 版面（NSTextView 會做 cell layout）
+        // Use NSTextTable/NSTextTableBlock to produce a real table layout (NSTextView performs cell layout).
         let allRows = [table.header] + table.rows
         let colCount = allRows.map(\.count).max() ?? 0
         guard colCount > 0 else { return NSAttributedString(string: "") }
 
         let textTable = NSTextTable()
         textTable.numberOfColumns = colCount
-        // content-driven：小表格不強制撐滿視窗，避免每欄大片空白
+        // Content-driven: small tables don't force-fill the window (avoid huge empty space in each column).
         textTable.layoutAlgorithm = .automaticLayoutAlgorithm
         textTable.collapsesBorders = true
         textTable.hidesEmptyCells = false
 
         let out = NSMutableAttributedString()
 
-        // 估算欄寬：用字型量測出「內容導向」的 table 寬度（小表格會比較緊湊）
+        // Estimate column widths: measure text to make content-driven tables more compact.
         func measure(_ s: String, font: NSFont) -> CGFloat {
             let text = s.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return 0 }
             return (text as NSString).size(withAttributes: [.font: font]).width
         }
 
-        // cell 的 padding / border（需與下方 block 設定一致）
+        // Cell padding / border (must match block settings below).
         let cellPadding: CGFloat = 6
         let cellBorder: CGFloat = 1
-        let cellExtra: CGFloat = cellPadding * 2 + cellBorder * 2 + 8  // 多留一點避免緊貼
+        let cellExtra: CGFloat = cellPadding * 2 + cellBorder * 2 + 8  // extra to avoid tight fit
 
         var colWidths = Array(repeating: CGFloat(0), count: colCount)
         for (rIndex, row) in allRows.enumerated() {
@@ -1163,10 +1163,10 @@ private final class NativeMarkdownParser {
         let useFixedColumns = intrinsicWidth > 0 && intrinsicWidth <= maxWidth
 
         if useFixedColumns {
-            // 小表格：整張 table 依內容寬度
+            // Small table: size the whole table by intrinsic content width.
             textTable.setContentWidth(intrinsicWidth, type: .absoluteValueType)
         } else {
-            // 超寬表格：限制最大寬，讓 TextKit 以自動佈局 + 換行處理
+            // Very wide table: cap max width and let TextKit handle layout + wrapping.
             textTable.setContentWidth(maxWidth, type: .absoluteValueType)
         }
 
@@ -1191,7 +1191,7 @@ private final class NativeMarkdownParser {
             block.backgroundColor = isHeader ? theme.codeBackgroundColor : NSColor.clear
             block.verticalAlignment = .topAlignment
             if useFixedColumns, col < colWidths.count {
-                // 小表格：每欄使用內容估算的固定寬度
+                // Small table: each column uses the measured fixed width.
                 block.setContentWidth(colWidths[col], type: .absoluteValueType)
             }
 
@@ -1209,7 +1209,7 @@ private final class NativeMarkdownParser {
                 .paragraphStyle: paragraphStyle
             ]
 
-            // 允許 cell 內使用簡單 inline 格式（粗體/連結/inline code 等）
+            // Allow simple inline formatting inside cells (bold/link/inline code, etc.).
             let content = NSMutableAttributedString(attributedString: formatInline(text, baseAttributes: base))
             content.append(NSAttributedString(string: "\n", attributes: base))
             content.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: content.length))
@@ -1230,7 +1230,7 @@ private final class NativeMarkdownParser {
             }
         }
 
-        // 表格後加些間距（外層也會加 \n\n，但避免 table block 黏在下一段）
+        // Add spacing after the table (outer layer also adds \n\n; this avoids table block sticking to the next paragraph).
         out.append(NSAttributedString(string: "\n"))
         return out
     }
@@ -1306,7 +1306,7 @@ private final class NativeMarkdownParser {
         }
         
         // italic：*text* / _text_
-        // 這裡採用保守規則，避免把列表符號等誤判成 italic：要求內文至少 2 字元。
+        // Conservative rule to avoid mis-detecting list markers as italics: require at least 2 characters of content.
         applyInlinePattern(
             pattern: "(?<!\\*)\\*(.{2,}?)\\*(?!\\*)",
             in: attributed,
@@ -1345,25 +1345,25 @@ private final class NativeMarkdownParser {
             let urlString = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
             
             if let url = resolveResourceURL(urlString) {
-                // 外連圖片：非阻塞載入（避免卡 UI/影響啟動速度）
+                // Remote images: non-blocking load (avoid UI stalls / slow startup).
                 if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
                     let maxWidth: CGFloat = CGFloat(720.0 * theme.zoom)
                     let attachment = RemoteImageAttachment(url: url, maxWidth: maxWidth, zoom: theme.zoom)
                     attachment.startIfNeeded()
 
                     let imgString = NSMutableAttributedString(attachment: attachment)
-                    // 讓圖片也能點擊開啟 URL（若 NSTextView 支援 link on attachment）
+                    // Make the image clickable (if NSTextView supports links on attachments).
                     imgString.addAttribute(.link, value: url.absoluteString, range: NSRange(location: 0, length: imgString.length))
                     attributed.replaceCharacters(in: fullRange, with: imgString)
                     continue
                 }
 
-                // 本機圖片：同步載入（讀檔快，且不涉及網路）
+                // Local images: load synchronously (fast file IO; no network).
                 if let image = NSImage(contentsOf: url) {
                     let attachment = NSTextAttachment()
                     attachment.image = image
                     
-                    // 以一個合理的最大寬度縮放，避免超大圖片撐爆版面
+                    // Scale to a reasonable max width to avoid huge images breaking layout.
                     let maxWidth: CGFloat = CGFloat(720.0 * theme.zoom)
                     let size = image.size
                     if size.width > 0 && size.height > 0 {
@@ -1377,7 +1377,7 @@ private final class NativeMarkdownParser {
                     continue
                 }
             } else {
-                // fallback：顯示 alt 或 Image 文字，並在可能時附上連結
+                // Fallback: show alt text (or "Image") and attach a link if possible.
                 let label = altText.isEmpty ? "Image" : altText
                 let fallback = NSMutableAttributedString(string: label, attributes: baseAttributes)
                 if let url = URL(string: urlString), url.scheme != nil {
@@ -1396,12 +1396,12 @@ private final class NativeMarkdownParser {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return nil }
         
-        // 先嘗試標準 URL（含 file:// / https://）
+        // First, try a standard URL (file:// / https:// / etc.)
         if let u = URL(string: trimmed), u.scheme != nil {
             return u
         }
         
-        // 檔案路徑：支援 ~、絕對、相對
+        // File paths: support ~, absolute, and relative paths.
         let path: String
         if trimmed.hasPrefix("~") {
             path = NSString(string: trimmed).expandingTildeInPath
@@ -1483,7 +1483,7 @@ private final class NativeMarkdownParser {
 // MARK: - Code Highlight (Highlightr)
 
 private enum NativeHighlightr {
-    // Highlightr init 可能失敗（資源/JSContext），因此用 optional
+    // Highlightr init can fail (resources/JSContext), so keep it optional.
     private static let shared: Highlightr? = Highlightr()
 
     private static func isDarkMode() -> Bool {
@@ -1494,10 +1494,10 @@ private enum NativeHighlightr {
     static func highlight(code: String, languageHint: String, theme: NativeMarkdownTheme) -> NSAttributedString? {
         guard let hl = shared else { return nil }
 
-        // 設定字型（含 bold/italic 變體）
+        // Set code font (including bold/italic variants).
         hl.theme.setCodeFont(theme.monoFont)
 
-        // 依外觀切 theme（若指定失敗就沿用預設 pojoaque）
+        // Switch theme based on appearance (if setting fails, keep the default).
         let desired = isDarkMode() ? "paraiso-dark" : "paraiso-light"
         _ = hl.setTheme(to: desired)
 
@@ -1514,16 +1514,16 @@ private enum NativeCodeHighlighter {
     static func applyRegexHighlight(to attributed: NSMutableAttributedString, languageHint: String, theme: NativeMarkdownTheme) {
         let language = languageHint.lowercased()
         
-        // 先套用通用規則（strings / numbers / comments）
+        // Apply generic rules first (strings / numbers / comments).
         applyRegex(#""(?:\\.|[^"\\])*""#, to: attributed, color: NSColor.systemRed)
         applyRegex(#"'(?:\\.|[^'\\])*'"#, to: attributed, color: NSColor.systemRed)
         applyRegex(#"\b\d+(\.\d+)?\b"#, to: attributed, color: NSColor.systemOrange)
         
-        // 單行註解（Swift/JS）與 Python 註解
+        // Single-line comments (Swift/JS) and Python comments
         applyRegex(#"//.*$"#, to: attributed, color: NSColor.systemGreen, options: [.anchorsMatchLines])
         applyRegex(#"#.*$"#, to: attributed, color: NSColor.systemGreen, options: [.anchorsMatchLines])
         
-        // 依語言套 keyword
+        // Apply language-specific keywords
         switch language {
         case "swift":
             applyKeywords([
@@ -1536,7 +1536,7 @@ private enum NativeCodeHighlighter {
                 "nil", "true", "false", "self", "super", "init"
             ], to: attributed, color: NSColor.systemPurple)
             
-            // 型別（非常粗略）：以大寫開頭的識別字
+            // Types (very rough): identifiers starting with an uppercase letter
             applyRegex(#"\b[A-Z][A-Za-z0-9_]*\b"#, to: attributed, color: NSColor.systemBlue)
             
         case "python":
@@ -1560,7 +1560,7 @@ private enum NativeCodeHighlighter {
             ], to: attributed, color: NSColor.systemPurple)
             
         default:
-            // 未知語言：只做通用規則
+            // Unknown language: only generic rules
             break
         }
     }

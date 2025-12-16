@@ -1,9 +1,9 @@
-# mdview（`mdview`）— LLM 專案入口
+# mdview (`mdview`) — LLM project entry
 
-## 目的
-macOS Markdown Reader（AppKit）。**只讀**：讀取本機 `.md`/`.markdown`，渲染到畫面，支援拖放與檔案變更自動 reload。
+## Purpose
+macOS Markdown reader (AppKit). **Read-only**: reads local `.md`/`.markdown`, renders to a window, supports drag & drop and auto-reload on file changes.
 
-## 最常用指令
+## Most used commands
 ```bash
 make debug
 make test
@@ -15,54 +15,54 @@ make smoke
 ./mdview --help
 ```
 
-## CLI（以 `Sources/main.swift` 為準）
-- **前景/背景啟動**：`--no-activate`（在 background job `&` / 子行程 / CI 內建議加，避免被系統終止）
-- **主題（Theme）**：`--theme=system|light|dark`（預設 system；也可用選單 `檢視 → 主題` 切換）
+## CLI (source of truth: `Sources/main.swift`)
+- **Foreground/background**: `--no-activate` (recommended for background jobs `&` / subprocesses / CI to avoid being killed by the system)
+- **Theme**: `--theme=system|light|dark` (default: system; can also switch via menu `View → Theme`)
 - **Markdown pipeline**：`--pipeline=regex|ast`、`--ast`
-- **GUI smoke**：`--smoke-test`（建立視窗後自動退出）
-- **Mermaid（預設）**：遇到 ` ```mermaid ` code block 時，會**保留 code block**，並在下方額外插入一張圖（透過 `mermaid.ink` 產生 SVG；需要網路；載入為非阻塞）
-- **GUI screenshot（CI/LLM 視覺驗證）**：
-  - `--screenshot <out.png>`、`--screenshot-delay <sec>`（預設 1.0）
-  - `--screenshot-scroll-to <text>`（推薦：確保目標區塊一定在截圖範圍內）
+- **GUI smoke**: `--smoke-test` (create a window, then exit automatically)
+- **Mermaid (default)**: for ` ```mermaid ` code blocks, the renderer **keeps the code block** and inserts a diagram below (via `mermaid.ink`; prefers PNG for fidelity; requires network; loads non-blockingly)
+- **GUI screenshot (CI/LLM visual verification)**:
+  - `--screenshot <out.png>`, `--screenshot-delay <sec>` (default: 1.0)
+  - `--screenshot-scroll-to <text>` (recommended: ensure the target block is within the screenshot)
   - `--screenshot-scroll-y <number>`
-  - `--screenshot-full`（有高度上限；超出會失敗，請改用 scroll-to）
-- **不啟動 GUI 的測試/除錯**：
-  - `--dump <file.md>`（輸出可做字串比對的解析結果）
-  - `--render-text <file.md>`（輸出渲染後純文字；測 deterministic regression）
-  - `--skeleton-check`（寬度骨架回歸檢查：避免「每字換行」）
-  - `--highlightr-check`（驗證 Highlightr / JSCore / resources 可用）
+  - `--screenshot-full` (has a height limit; if it fails, use scroll-to)
+- **No-GUI debug/tests**:
+  - `--dump <file.md>` (print parse output suitable for string comparisons)
+  - `--render-text <file.md>` (print rendered plain text; deterministic regression)
+  - `--skeleton-check` (width skeleton regression check: avoid per-character wrapping)
+  - `--highlightr-check` (verify Highlightr / JSCore / resources)
 
-## 測試輸出協定（供 automation/LLM 判斷）
-- **screenshot**：stdout 會印
-  - `SCREENSHOT_OK <path>`（exit 0）
-  - `SCREENSHOT_FAIL <path>`（exit 1）
-  - `SCREENSHOT_TIMEOUT <path>`（exit 2）
-  - `SCREENSHOT_SCROLL_TO_NOT_FOUND <text> <path>`（exit 1）
-- **smoke**：stdout 會印 `SMOKE_OK`（exit 0）或 `SMOKE_FAIL`（exit 1）
+## Test output contract (for automation/LLM)
+- **screenshot**: stdout prints
+  - `SCREENSHOT_OK <path>` (exit 0)
+  - `SCREENSHOT_FAIL <path>` (exit 1)
+  - `SCREENSHOT_TIMEOUT <path>` (exit 2)
+  - `SCREENSHOT_SCROLL_TO_NOT_FOUND <text> <path>` (exit 1)
+- **smoke**: stdout prints `SMOKE_OK` (exit 0) or `SMOKE_FAIL` (exit 1)
 
-## 重要不變式（回歸最常發生在這）
-- **不能每字換行**：`NSTextContainer` 寬度必須跟著 `NSScrollView` 可視寬同步，且幾何變更時要強制 reflow（見 `NativeMarkdownView.syncTextContainerWidth()`）。
-- **所有自動化路徑要有 timeout**：測試與 screenshot/smoke 都必須能自行退出（Makefile / 測試 runner 已採 timeout + kill）。
+## Important invariants (common regression sources)
+- **No per-character wrapping**: `NSTextContainer` width must track `NSScrollView` visible width, and geometry changes must force reflow (see `NativeMarkdownView.syncTextContainerWidth()`).
+- **All automation paths must have timeouts**: tests and screenshot/smoke must exit on their own (Makefile / test runner use timeout + kill).
 
-## 程式碼入口（優先閱讀順序）
-- `Sources/main.swift`：CLI flags / 測試模式入口
-- `Sources/AppDelegate.swift`：視窗、載檔、檔案監控、screenshot/smoke 流程
-- `Sources/NativeMarkdownView.swift`：Native renderer（排版/寬度/截圖/scroll-to 關鍵）
-- `Sources/ASTMarkdownRenderer.swift`：AST 管線（`swift-markdown`）
-- `Sources/FileHandler.swift`：讀檔 + 檔案變更監控
-- `Sources/MenuBuilder.swift`：選單/快捷鍵
-- `Tests/test_runner.swift`：測試入口
+## Code entry points (recommended reading order)
+- `Sources/main.swift`: CLI flags / test-mode entry points
+- `Sources/AppDelegate.swift`: windows, file loading, file watching, screenshot/smoke flows
+- `Sources/NativeMarkdownView.swift`: native renderer (layout/width/screenshot/scroll-to are key)
+- `Sources/ASTMarkdownRenderer.swift`: AST pipeline (`swift-markdown`)
+- `Sources/FileHandler.swift`: file reading + file change watching
+- `Sources/MenuBuilder.swift`: menus / shortcuts
+- `Tests/test_runner.swift`: test entry point
 
 ## FAQ
-### 為什麼執行後會看到 `IMKCFRunLoopWakeUpReliable` / `mach port` 的 error log？
-這通常是 **macOS InputMethodKit / TextKit** 在初始化文字輸入子系統時輸出的系統 log（本專案內沒有印這段字串）。多數情況下 **不影響功能**，可以忽略。
+### Why do I see `IMKCFRunLoopWakeUpReliable` / `mach port` error logs?
+This is usually a **macOS InputMethodKit / TextKit** system log emitted while initializing the text input subsystem (this project does not print that string). In most cases it **does not affect functionality** and can be ignored.
 
-若你需要讓自動化輸出更乾淨，可考慮：
-- 在測試/CI 僅看 `stdout`（把 `stderr` 分流/過濾特定字串）
-- 或改用 `.app bundle` 形式啟動（較符合 macOS 慣例，且也更容易有正式 Dock icon）
+If you need cleaner automation logs, consider:
+- Only checking `stdout` in tests/CI (split/filter `stderr` for known noisy strings)
+- Launching as a `.app bundle` (more macOS-native; also easier to have a proper Dock icon)
 
-## 在「無法啟動 GUI 子行程」環境
-預設 `make test` 會把「mdview 子行程不可執行」視為失敗（避免掩蓋回歸）。若你在特殊環境需要跳過，改用：
+## In environments where the GUI subprocess cannot run
+By default, `make test` treats "mdview subprocess cannot execute" as a failure (to avoid hiding regressions). If you must skip in a special environment, use:
 
 ```bash
 MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1 make test

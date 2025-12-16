@@ -1,5 +1,5 @@
 # macOS Markdown Viewer - Makefile
-# 使用 swiftc 編譯原生 macOS 應用程式
+# Build the native macOS app with Swift
 
 APP_NAME = mdview
 SOURCES = Sources/main.swift \
@@ -15,86 +15,86 @@ SOURCES = Sources/main.swift \
 
 FRAMEWORKS = -framework AppKit
 
-# 編譯旗標
+# Build flags
 DEBUG_FLAGS = -g -Onone
 RELEASE_FLAGS = -O -whole-module-optimization
 
 .PHONY: all debug release clean run run-empty run-ci run-empty-ci test smoke help
 
-# 預設目標：Debug 版本
+# Default target: Debug
 all: debug
 
-# Debug 版本
+# Debug
 debug: $(SOURCES)
-	@echo "🔨 編譯 Debug 版本..."
+	@echo "🔨 Building Debug..."
 	@perl -e 'alarm shift; exec @ARGV' 300 swift build -c debug --product $(APP_NAME)
-	@# macOS Gatekeeper 在部分環境會拒絕執行未簽章二進制；用 ad-hoc sign 確保可在測試/子行程中正常啟動
-	@# 注意：swift build 的執行檔旁邊可能需要 SPM 產生的 resource bundles；因此不直接複製二進制到 repo root，
-	@# 而是對 .build 產物簽章後，在 repo root 建立 symlink（./mdview -> .build/.../mdview）。
+	@# macOS Gatekeeper may refuse to run unsigned binaries in some environments; use ad-hoc signing so tests/subprocesses can launch.
+	@# Note: the swift build product may rely on SPM resource bundles next to it. So we do not copy the binary to repo root.
+	@# Instead, we sign the .build product and create a symlink at repo root (./mdview -> .build/.../mdview).
 	@/usr/bin/codesign --force --sign - .build/debug/$(APP_NAME)
 	@ln -sf .build/debug/$(APP_NAME) ./$(APP_NAME)
-	@echo "✅ 編譯完成: ./$(APP_NAME)"
+	@echo "✅ Built: ./$(APP_NAME)"
 
-# Release 版本
+# Release
 release: $(SOURCES)
-	@echo "🚀 編譯 Release 版本..."
+	@echo "🚀 Building Release..."
 	@perl -e 'alarm shift; exec @ARGV' 300 swift build -c release --product $(APP_NAME)
 	@/usr/bin/codesign --force --sign - .build/release/$(APP_NAME)
 	@ln -sf .build/release/$(APP_NAME) ./$(APP_NAME)
-	@echo "✅ 編譯完成: ./$(APP_NAME)"
+	@echo "✅ Built: ./$(APP_NAME)"
 
-# 清除編譯產物
+# Clean build artifacts
 clean:
-	@echo "🧹 清除編譯產物..."
-	@# 用 trash 移到 macOS Trash；路徑不存在時不要讓 make 失敗
+	@echo "🧹 Cleaning build artifacts..."
+	@# Move to macOS Trash; don't fail if a path doesn't exist.
 	@if [ -e "./$(APP_NAME)" ]; then trash "./$(APP_NAME)"; fi
 	@if [ -e "./mdviewer" ]; then trash "./mdviewer"; fi
 	@if [ -d ".build" ]; then trash ".build"; fi
-	@echo "✅ 清除完成"
+	@echo "✅ Clean complete"
 
-# 執行應用程式（使用測試檔案；互動式，預期會常駐）
+# Run (with a fixture file; interactive; expected to stay running)
 run: debug
-	@echo "▶️ 執行應用程式..."
+	@echo "▶️ Running app..."
 	@./$(APP_NAME) Fixtures/test.md
 
-# 執行應用程式（無檔案；互動式，預期會常駐）
+# Run (no file; interactive; expected to stay running)
 run-empty: debug
-	@echo "▶️ 執行應用程式（無檔案）..."
+	@echo "▶️ Running app (no file)..."
 	@./$(APP_NAME)
 
-# 執行應用程式（CI/自動化用：加 timeout 避免卡住）
+# Run (CI/automation: add timeout to avoid hanging)
 run-ci: debug
-	@echo "▶️ 執行應用程式（CI timeout 30s）..."
+	@echo "▶️ Running app (CI timeout 30s)..."
 	@perl -e 'alarm shift; exec @ARGV' 30 ./$(APP_NAME) Fixtures/test.md
 
 run-empty-ci: debug
-	@echo "▶️ 執行應用程式（無檔案；CI timeout 30s）..."
+	@echo "▶️ Running app (no file; CI timeout 30s)..."
 	@perl -e 'alarm shift; exec @ARGV' 30 ./$(APP_NAME)
 
-# 執行測試（先確保 binary 為最新）
+# Run tests (ensure the binary is up-to-date first)
 test: debug
-	@echo "🧪 執行測試..."
+	@echo "🧪 Running tests..."
 	@perl -e 'alarm shift; exec @ARGV' 120 swift Tests/test_runner.swift
 
-# GUI smoke test（避免卡住）
+# GUI smoke test (avoid hanging)
 smoke: debug
-	@echo "🫧 執行 GUI smoke test..."
+	@echo "🫧 Running GUI smoke test..."
 	@perl -e 'alarm shift; exec @ARGV' 10 ./$(APP_NAME) --smoke-test
 
-# 顯示幫助
+# Help
 help:
-	@echo "macOS Markdown Viewer - 建置指令"
+	@echo "macOS Markdown Viewer - Build commands"
 	@echo ""
-	@echo "使用方式:"
-	@echo "  make          - 編譯 Debug 版本"
-	@echo "  make debug    - 編譯 Debug 版本"
-	@echo "  make release  - 編譯 Release 版本"
-	@echo "  make clean    - 清除編譯產物"
-	@echo "  make run      - 編譯並執行（使用 test.md）"
-	@echo "  make run-empty- 編譯並執行（無檔案）"
-	@echo "  make run-ci   - 編譯並執行（使用 test.md；timeout 30s）"
-	@echo "  make run-empty-ci - 編譯並執行（無檔案；timeout 30s）"
-	@echo "  make test     - 執行測試"
+	@echo "Usage:"
+	@echo "  make              - Build Debug"
+	@echo "  make debug        - Build Debug"
+	@echo "  make release      - Build Release"
+	@echo "  make clean        - Clean build artifacts"
+	@echo "  make run          - Build & run (with Fixtures/test.md)"
+	@echo "  make run-empty    - Build & run (no file)"
+	@echo "  make run-ci       - Build & run (with Fixtures/test.md; timeout 30s)"
+	@echo "  make run-empty-ci - Build & run (no file; timeout 30s)"
+	@echo "  make test         - Run tests"
 	@echo ""
-	@echo "執行方式:"
+	@echo "Running:"
 	@echo "  ./$(APP_NAME) path/to/file.md"

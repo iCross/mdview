@@ -3,57 +3,58 @@ import Foundation
 
 /// Mermaid fenced code block renderer (via mermaid.ink).
 ///
-/// 設計目標：
-/// - 不依賴 `mmdc` / mermaid-cli
-/// - 預設會嘗試顯示 Mermaid diagram（以外連圖片載入）
-/// - 保留 code block 原文；diagram 由上層 renderer 另行插入
+/// Design goals:
+/// - Do not depend on `mmdc` / mermaid-cli
+/// - Try to show Mermaid diagrams by default (loaded as a remote image)
+/// - Keep the original code block text; the diagram is inserted by the higher-level renderer
 enum MermaidRenderer {
-    /// 讓 PNG 有更好的文字銳利度（retina/縮放時）；對 mermaid.ink 來說 `scale` 必須搭配 `width/height`。
+    /// Improve PNG text sharpness (retina/zoom). On mermaid.ink, `scale` must be used together with `width/height`.
     private static let pngRasterScale: Int = 2
 
-    /// 產生 mermaid.ink 的 SVG diagram URL（pako: zlib-deflate + base64url）。
+    /// Build the mermaid.ink SVG diagram URL (base64url payload).
     static func makeDiagramURL(code: String, appearance: NSAppearance?) -> URL? {
         makeMermaidInkURL(endpoint: .svg, code: code, appearance: appearance)
     }
     
-    /// 產生「原版」mermaid.ink SVG URL（不注入 htmlLabels:false；用於對比原始渲染結果）。
+    /// Build the "original" mermaid.ink SVG URL (do not inject htmlLabels:false; used to compare with the default rendering).
     ///
-    /// - Note: 可用於查看 mermaid.ink 的原始輸出（可能含 foreignObject/HTML labels）。
+    /// - Note: Useful for inspecting mermaid.ink's default output (may include foreignObject/HTML labels).
     static func makeOriginalDiagramURL(code: String, appearance: NSAppearance?) -> URL? {
         makeMermaidInkURL(endpoint: .svg, code: code, appearance: appearance, injectNativeSVGConfig: false)
     }
     
-    /// 產生對比資訊：原版 vs. 修改版（native SVG）的 URL。
+    /// Build comparison text: original vs. modified (native SVG) URLs.
     ///
-    /// - Returns: 包含兩個 URL 的字串，方便在瀏覽器中對比渲染結果。
+    /// - Returns: A string containing both URLs for easy side-by-side comparison in a browser.
     static func makeDiagramURLComparison(code: String, appearance: NSAppearance?) -> String? {
         guard let originalURL = makeOriginalDiagramURL(code: code, appearance: appearance),
               let nativeURL = makeDiagramURL(code: code, appearance: appearance) else {
             return nil
         }
         return """
-        原版 (htmlLabels 預設):
+        Original (default htmlLabels):
         \(originalURL.absoluteString)
         
-        修改版 (htmlLabels:false):
+        Modified (htmlLabels:false):
         \(nativeURL.absoluteString)
         """
     }
 
-    /// 產生可顯示於 NSTextView 的外連圖片附件。
+    /// Build a remote-image attachment that can be displayed in NSTextView.
     ///
-    /// - Note: 會立即觸發非阻塞下載（不等待網路）。
+    /// - Note: Starts a non-blocking download immediately (does not wait for the network).
     static func makeAttachment(code: String, theme: NativeMarkdownTheme, maxWidth: CGFloat?) -> NSAttributedString? {
         let appearance = NSApp?.effectiveAppearance
-        // 需求：render 結果要和 mermaid.ink「原版」一致（例如 edge labels 會有白底框，文字不應壓在線條上）。
+        // Requirement: rendering should match mermaid.ink's "original" output as closely as possible
+        // (e.g. edge labels with a white background; text should not overlap lines).
         //
-        // 現況：
-        // - AppKit 的 SVG decoder 對 Mermaid 產出的 SVG（尤其是文字 baseline/foreignObject）支援不完整，
-        //   即使透過 `htmlLabels:false` 轉成純 SVG text，也可能出現文字位置偏移（例如壓到線條上）。
+        // Reality:
+        // - AppKit's SVG decoding for Mermaid-generated SVG (especially baseline/foreignObject) is imperfect.
+        //   Even with `htmlLabels:false` producing pure SVG text, label positions can be off.
         //
-        // 解法：
-        // - 顯示時**優先使用 PNG**（由 mermaid.ink rasterize，效果與瀏覽器渲染一致）
-        // - link 仍指向原始 SVG（方便使用者在瀏覽器查看/另存向量）
+        // Strategy:
+        // - Prefer PNG for display (rasterized by mermaid.ink; matches browser rendering)
+        // - Keep links pointing to the original SVG (easy to view/save as vector in a browser)
         let wLimit: CGFloat = {
             if let maxWidth { return max(120, maxWidth) }
             return CGFloat(720.0 * theme.zoom)
@@ -62,7 +63,7 @@ enum MermaidRenderer {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        // 以顯示用 maxWidth（點數）作為 raster request 的 width，上層再用 scale/downscale 讓顯示保持在點數但更銳利。
+        // Use display maxWidth (points) as the raster request width; then scale/downscale for sharper output.
         let rasterWidth = Int(ceil(max(1, wLimit)))
         let originalPNGURL = makeMermaidInkURL(
             endpoint: .png,
@@ -85,7 +86,7 @@ enum MermaidRenderer {
         attachment.startIfNeeded()
 
         let out = NSMutableAttributedString(attachment: attachment)
-        // link 指向「原版 SVG」（向量、且可在瀏覽器看到完整 HTML labels）
+        // Link to the "original SVG" (vector; view full HTML labels in a browser).
         let linkURL = originalSVGURL ?? primaryURL
         out.addAttribute(.link, value: linkURL.absoluteString, range: NSRange(location: 0, length: out.length))
         return out
@@ -108,8 +109,8 @@ enum MermaidRenderer {
     ) -> URL? {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        // mermaid.ink 目前可穩定支援 `/svg/<base64url(utf8)>` 形式（不需 pako 壓縮）。
-        // 先以最簡單且可預期的 encoding 走通，避免 API 版本差異導致 diagram 全部變成 error SVG。
+        // mermaid.ink reliably supports `/svg/<base64url(utf8)>` (no pako compression required).
+        // Use the simplest predictable encoding to avoid API/version drift turning diagrams into error SVGs.
         let finalCode = injectNativeSVGConfig ? makeCodeForNativeSVGDisplay(trimmed) : trimmed
         guard let payload = makeBase64URLPayload(code: finalCode) else { return nil }
 
@@ -128,14 +129,15 @@ enum MermaidRenderer {
                 URLQueryItem(name: "bgColor", value: "transparent")
             ]
         case .png:
-            // PNG fallback：用 img endpoint + type=png
+            // PNG via /img endpoint + type=png
             c.path = "/img/\(payload)"
             var items: [URLQueryItem] = [
                 URLQueryItem(name: "type", value: "png"),
                 URLQueryItem(name: "theme", value: theme),
                 URLQueryItem(name: "bgColor", value: "transparent")
             ]
-            // mermaid.ink：scale 必須搭配 width 或 height；這裡用 width 作為上限（像素），讓大圖可拿到 2x raster 再由 client downscale。
+            // mermaid.ink: scale must be paired with width or height. Here we use width as a pixel upper bound,
+            // request a 2x raster, then let the client downscale to points.
             if let rasterWidth, rasterWidth > 0 {
                 items.append(URLQueryItem(name: "width", value: String(rasterWidth)))
             }
@@ -158,16 +160,16 @@ enum MermaidRenderer {
         return b64
     }
 
-    /// 讓 mermaid.ink 回傳「不含 foreignObject」的 SVG（以便 AppKit 可正確渲染 labels）。
+    /// Make mermaid.ink return an SVG without foreignObject (so AppKit can render labels correctly).
     ///
     /// - Note:
-    ///   - Mermaid 的 `htmlLabels:false` 在不同版本/diagram type 上的行為略有差異。
-    ///   - 目前觀察：需要同時設 top-level 與 flowchart 的 htmlLabels 才能完全移除 foreignObject。
+    ///   - Mermaid's `htmlLabels:false` behavior varies across versions/diagram types.
+    ///   - Current observation: setting both top-level and flowchart htmlLabels helps fully remove foreignObject.
     private static func makeCodeForNativeSVGDisplay(_ code: String) -> String {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return trimmed }
 
-        // 若使用者已提供 init directive，就尊重原始設定（避免覆寫行為）。
+        // If the user already provided an init directive, respect it (avoid overriding behavior).
         if trimmed.contains("%%{init:") { return trimmed }
 
         let initDirective = #"%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false}} }%%"#

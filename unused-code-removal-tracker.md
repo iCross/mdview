@@ -1,34 +1,34 @@
 ## unused-code-removal tracker
 
-### 目標
-- 移除 repo 內「已確認無引用」的代碼（刪檔/刪未使用宣告）。
-- 確保 `make debug`、`make test` 全數通過。
+### Goal
+- Remove code that is confirmed to have no references in the repo (delete files / remove unused declarations).
+- Ensure `make debug` and `make test` both pass.
 
-### 盤點結論（2025-12-16）
-- `IncrementalSyntaxHighlighter` 僅出現在：
-  - `Sources/IncrementalSyntaxHighlighter.swift`（定義）
-  - `Makefile`（SOURCES 硬編清單）
-  - `Tests/test_runner.swift`（requiredFiles 硬編清單）
-  - **未發現任何實際使用點**。
-- `FileHandler` 內下列 methods 目前僅有定義、未發現呼叫點：
+### Inventory summary (2025-12-16)
+- `IncrementalSyntaxHighlighter` appeared only in:
+  - `Sources/IncrementalSyntaxHighlighter.swift` (definition)
+  - `Makefile` (hard-coded SOURCES list)
+  - `Tests/test_runner.swift` (hard-coded requiredFiles list)
+  - **No actual usage sites were found**.
+- In `FileHandler`, the following methods were defined but had no call sites:
   - `fileExists(at:)`
   - `isMarkdownFile(at:)`
   - `getFileName(from:)`
   - `getFileDirectory(from:)`
-- `FileHandler.resolveAbsolutePath(_:)` 有使用點（`Sources/AppDelegate.swift`）。
+- `FileHandler.resolveAbsolutePath(_:)` had usage (`Sources/AppDelegate.swift`).
 
-### 已完成
-- [x] 更新 `Makefile` 移除 `Sources/IncrementalSyntaxHighlighter.swift`
-- [x] 更新 `Tests/test_runner.swift` 移除 `Sources/IncrementalSyntaxHighlighter.swift`
+### Completed
+- [x] Updated `Makefile` to remove `Sources/IncrementalSyntaxHighlighter.swift`
+- [x] Updated `Tests/test_runner.swift` to remove `Sources/IncrementalSyntaxHighlighter.swift`
 
-### 進行中
+### In progress
 - [x] `git rm Sources/IncrementalSyntaxHighlighter.swift`
-- [x] 移除 `Sources/FileHandler.swift` 內未使用 helper methods（`fileExists/isMarkdownFile/getFileName/getFileDirectory`）
-- [x] 跑 `make debug` / `make test` + smoke（`make debug`、`make test`、`./mdview --help`、`./mdview --no-activate --smoke-test` 皆通過）
-- [x] commit（`391e71b3d04697af6ae68da143e3be05bc014f44`）
+- [x] Removed unused helper methods in `Sources/FileHandler.swift` (`fileExists/isMarkdownFile/getFileName/getFileDirectory`)
+- [x] Ran `make debug` / `make test` + smoke (`make debug`, `make test`, `./mdview --help`, `./mdview --no-activate --smoke-test` all passed)
+- [x] Commit (`391e71b3d04697af6ae68da143e3be05bc014f44`)
 
-### 驗證結果摘要
+### Verification summary
 - `make debug`: ✅
-- `make test`: ✅（57 passed, 0 failed）
+- `make test`: ✅ (57 passed, 0 failed)
 - `./mdview --help`: ✅
-- `./mdview --no-activate --smoke-test`: ✅（輸出 `SMOKE_OK`）
+- `./mdview --no-activate --smoke-test`: ✅ (prints `SMOKE_OK`)

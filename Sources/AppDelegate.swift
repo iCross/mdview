@@ -1,5 +1,5 @@
 // AppDelegate.swift
-// macOS Markdown Viewer - 應用程式代理
+// macOS Markdown Viewer - Application delegate
 import AppKit
 import Foundation
 import Darwin
@@ -11,19 +11,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBuilder: MenuBuilder!
     
     private var windowControllers: [MarkdownWindowController] = []
-    private var pendingFilePaths: [String] = []  // 儲存啟動前收到的檔案路徑（可能多個）
+    private var pendingFilePaths: [String] = []  // File paths received before bootstrap (can be multiple)
     
     private var isSmokeTestMode: Bool {
         CommandLine.arguments.contains("--smoke-test")
     }
 
     private var isAutomationMode: Bool {
-        // 用於 CI/LLM：避免做會卡住的前景啟動行為（例如 activate）
+        // For CI/automation: avoid foreground behaviors that may hang or be rejected (e.g. activate)
         isSmokeTestMode || (screenshotOutputPath != nil)
     }
 
     private var screenshotOutputPath: String? {
-        // 支援：
+        // Supports:
         // - --screenshot /path/to/out.png
         // - --screenshot=/path/to/out.png
         let args = CommandLine.arguments
@@ -53,7 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var screenshotScrollToText: String? {
-        // 支援：
+        // Supports:
         // - --screenshot-scroll-to <text>
         // - --screenshot-scroll-to=<text>
         let args = CommandLine.arguments
@@ -68,7 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var screenshotScrollY: CGFloat? {
-        // 支援：
+        // Supports:
         // - --screenshot-scroll-y <number>
         // - --screenshot-scroll-y=<number>
         let args = CommandLine.arguments
@@ -86,7 +86,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var screenshotDelaySeconds: TimeInterval {
-        // 支援：--screenshot-delay=1.2 或 --screenshot-delay 1.2
+        // Supports: --screenshot-delay=1.2 or --screenshot-delay 1.2
         let args = CommandLine.arguments
         if let arg = args.first(where: { $0.hasPrefix("--screenshot-delay=") }) {
             let v = arg.replacingOccurrences(of: "--screenshot-delay=", with: "")
@@ -103,9 +103,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var didBootstrap: Bool = false
 
     private var preferredNativePipeline: NativeMarkdownPipeline {
-        // 支援：
+        // Supports:
         // - --pipeline=regex|ast
-        // - --ast（等同 --pipeline=ast）
+        // - --ast (same as --pipeline=ast)
         let args = CommandLine.arguments
         if let pipelineArg = args.first(where: { $0.hasPrefix("--pipeline=") }) {
             let value = pipelineArg.replacingOccurrences(of: "--pipeline=", with: "").lowercased()
@@ -124,19 +124,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         bootstrapIfNeeded()
     }
     
-    /// 給「非 .app bundle、從 CLI 直接執行」的啟動路徑使用：
-    /// 在某些情況下 AppKit 的 Launch 回呼時序不穩定，會導致視窗不出現。
-    /// 這裡把啟動流程做成可重入且可手動觸發，確保一次到位顯示 GUI。
+    /// Used for the "not a .app bundle, executed directly from CLI" launch path:
+    /// in some situations AppKit's launch callback timing can be unstable and the window may not appear.
+    /// This makes the bootstrap flow re-entrant and manually triggerable, ensuring the GUI shows reliably.
     func bootstrapIfNeeded() {
         guard !didBootstrap else { return }
         didBootstrap = true
         
-        // 再保險一次：確保是一般 GUI app（非 bundle 從 Terminal 啟動時特別重要）
+        // Extra safety: ensure this is a regular GUI app (especially important when launched from Terminal without a bundle)
         NSApp.setActivationPolicy(.regular)
 
-        // CLI smoke test：不初始化 renderer，單純驗證「能顯示 GUI + 正常退出」
+        // CLI smoke test: don't initialize the renderer; only verify "GUI can show + exits cleanly"
         if isSmokeTestMode {
-            // 這裡不要依賴 timer（在某些自動化/無前景情境 timer 可能不觸發，會導致測試卡住）
+            // Don't rely on a timer here (in some automation/no-foreground scenarios timers may not fire and tests can hang)
             let w = makeSmokeTestWindow()
             w.makeKeyAndOrderFront(nil)
             let ok = w.isVisible && (NSApp.activationPolicy() == .regular)
@@ -145,13 +145,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             Darwin.exit(ok ? 0 : 1)
         }
 
-        // 其餘初始化放到下一個 tick，讓 AppKit event loop 穩定後再碰 renderer
+        // Defer the rest to the next tick so AppKit's event loop is stable before touching the renderer
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.setupMenu()
             self.processPendingAndCommandLineFiles()
 
-            // GUI 截圖模式：渲染後自動輸出 PNG 並退出（供測試/agent 使用）
+            // GUI screenshot mode: render, write a PNG, then exit (for tests/agents)
             if let outPath = self.screenshotOutputPath, let controller = self.windowControllers.first {
                 self.scheduleScreenshotAndExit(controller: controller, outputPath: outPath, delaySeconds: self.screenshotDelaySeconds)
             }
@@ -159,16 +159,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func shouldActivateAppInThisSession() -> Bool {
-        // 在某些環境（例如被當成 background job `&` 啟動，或在無互動 TTY 的子行程中）
-        // 強制 activate 可能會被系統拒絕，甚至直接 SIGKILL。
-        // 策略：只有「前景互動 TTY」才 activate；否則安靜地跳過。
+        // In some environments (e.g. launched as a background job `&`, or in a non-interactive subprocess),
+        // forcing activation can be rejected by the system, or even lead to SIGKILL.
+        // Policy: only activate for a foreground interactive TTY; otherwise, silently skip.
         if isAutomationMode { return false }
         if CommandLine.arguments.contains("--no-activate") { return false }
 
-        // 若 stdin 不是 TTY（例如被 CI/測試 runner 啟動），就不要 activate。
+        // If stdin is not a TTY (e.g. launched by CI/test runner), don't activate.
         if isatty(STDIN_FILENO) == 0 { return false }
 
-        // 若不是 controlling terminal 的前景 process group（典型：`cmd &` 背景 job），不要 activate。
+        // If we're not the foreground process group of the controlling terminal (typical `cmd &`), don't activate.
         let fg = tcgetpgrp(STDIN_FILENO)
         if fg == -1 { return false }
         return fg == getpgrp()
@@ -183,7 +183,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func currentThemePreference() -> ThemePreference {
-        // 若沒有強制 appearance，就視為 system
+        // If appearance isn't forced, treat it as system.
         guard let appearance = NSApp.appearance else { return .system }
         if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
             return .dark
@@ -202,7 +202,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.appearance = NSAppearance(named: .darkAqua)
         }
         
-        // Highlightr theme 會在 render 當下依 effectiveAppearance 選擇，因此需要 rerender 才能切換。
+        // Highlightr picks its theme at render time from `effectiveAppearance`, so we need to rerender to apply changes.
         for c in windowControllers {
             c.rerender()
         }
@@ -217,13 +217,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-        // AppKit 可能會把某些「非 option 的 argv」也當成 openFile 事件丟進來；
-        // 這裡只接受 Markdown，避免例如 `--screenshot <out.png>` 的 out path 被誤當成要開的文件。
+        // AppKit may feed some "non-option argv" as `openFile` events.
+        // Only accept Markdown here; otherwise a path like `--screenshot <out.png>` could be misinterpreted as a document.
         let lower = filename.lowercased()
         let isMarkdown = lower.hasSuffix(".md") || lower.hasSuffix(".markdown")
         if !isMarkdown { return false }
 
-        // 可能一次收到多個 openFile（例如 Finder 選多檔），因此用 array。
+        // We may receive multiple `openFile` calls (e.g. multi-select in Finder), so keep an array.
         if !didBootstrap || windowControllers.isEmpty {
             pendingFilePaths.append(filename)
         } else {
@@ -277,17 +277,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func processPendingAndCommandLineFiles() {
-        // screenshot 模式：只開第一個檔案，避免多視窗干擾截圖目標
+        // Screenshot mode: only open the first file to avoid multiple windows interfering with the target capture.
         let isScreenshot = (screenshotOutputPath != nil)
         
-        // 先處理 AppKit openFile 帶進來的檔案（可能多個）
+        // First, process files provided via AppKit openFile (can be multiple).
         var toOpen: [String] = []
         if !pendingFilePaths.isEmpty {
             toOpen.append(contentsOf: pendingFilePaths)
             pendingFilePaths.removeAll(keepingCapacity: true)
         }
         
-        // 再處理 CLI 參數帶的檔案（可能多個）
+        // Then, process files from CLI args (can be multiple).
         let cli = CommandLine.arguments.dropFirst()
         let cliFiles = cli.compactMap { arg -> String? in
             if arg.hasPrefix("-") { return nil }
@@ -296,7 +296,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         toOpen.append(contentsOf: cliFiles)
         
-        // 去重（避免同一路徑在 openFile + CLI 都出現）
+        // De-duplicate (avoid the same path appearing in both openFile + CLI).
         var seen = Set<String>()
         toOpen = toOpen.filter { p in
             let abs = FileHandler().resolveAbsolutePath(p)
@@ -306,7 +306,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         if isScreenshot {
-            // 僅挑第一個 Markdown 檔；若沒有就顯示 welcome page 仍可截圖（但通常測試會帶 md）
+            // Pick only the first Markdown file; if none, show the welcome page (still screenshot-able).
             if let firstMarkdown = toOpen.first(where: { p in
                 let lower = p.lowercased()
                 return lower.hasSuffix(".md") || lower.hasSuffix(".markdown")
@@ -330,7 +330,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Public Methods
     
     @objc func loadMarkdownFile(path: String) {
-        // 為了相容舊路徑：預設載入到目前 key window；若沒有，就開新視窗。
+        // Compatibility behavior: load into the current key window by default; if none, open a new window.
         if let c = activeWindowController() {
             c.loadMarkdownFile(path: path)
         } else {
@@ -366,11 +366,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Screenshot (automated GUI verification)
 
     private func scheduleScreenshotAndExit(controller: MarkdownWindowController, outputPath: String, delaySeconds: TimeInterval) {
-        // 避免 delay 為負數導致不可預期
+        // Guard against negative delay.
         let delay = max(0.0, delaySeconds)
         let url = URL(fileURLWithPath: outputPath)
 
-        // Watchdog：避免在自動化環境卡死（例如某些 AppKit 時序問題）
+        // Watchdog: avoid hanging in automation environments (e.g. AppKit timing issues).
         let watchdog = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
         watchdog.schedule(deadline: .now() + 12.0)
         watchdog.setEventHandler {
@@ -383,7 +383,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { Darwin.exit(1) }
 
-            // 確保至少跑過一次 layout/display
+            // Ensure we ran at least one layout/display pass.
             let window = controller.window
             window.displayIfNeeded()
             window.contentView?.layoutSubtreeIfNeeded()
@@ -391,7 +391,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             let native = controller.rendererView as? NativeMarkdownView
 
-            // Native：cacheDisplay 成 PNG（同步、無需螢幕錄製權限）
+            // Native: cacheDisplay to PNG (sync, no screen recording permission required).
             if let t = self.screenshotScrollToText {
                 let found = native?.scrollToFirstOccurrence(of: t) ?? false
                 if !found {
@@ -482,31 +482,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc func showHelp() {
         let alert = NSAlert()
-        alert.messageText = "Markdown Viewer 說明"
+        alert.messageText = "Markdown Viewer Help"
         alert.informativeText = """
-        使用方式：
+        How to use:
         
-        1. 拖放 .md 或 .markdown 檔案到視窗
-        2. 使用 File → Open 開啟檔案
-        3. 命令列：./mdview path/to/file.md
+        1. Drag and drop a `.md` or `.markdown` file onto the window
+        2. Use File → Open… to open a file
+        3. Command line: `./mdview path/to/file.md`
         
-        快捷鍵：
-        • ⌘O - 開啟檔案
-        • ⌘R - 重新載入
-        • ⌘+ - 放大
-        • ⌘- - 縮小
-        • ⌘0 - 實際大小
-        • ⌘W - 關閉視窗
-        • ⌘Q - 結束程式
+        Keyboard shortcuts:
+        • ⌘O - Open…
+        • ⌘R - Reload
+        • ⌘+ - Zoom in
+        • ⌘- - Zoom out
+        • ⌘0 - Actual size
+        • ⌘W - Close window
+        • ⌘Q - Quit
         
-        功能：
-        • 自動偵測檔案變更並重新載入
-        • 支援 GitHub Flavored Markdown
-        • 程式碼語法高亮
-        • 深色模式自動切換
+        Features:
+        • Auto-reload on file changes
+        • GitHub Flavored Markdown support
+        • Syntax highlighting
+        • Automatic dark mode support
         """
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "確定")
+        alert.addButton(withTitle: "OK")
         alert.runModal()
     }
 }
