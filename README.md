@@ -55,11 +55,19 @@ make smoke
 
 ## FAQ
 ### Why do I see `IMKCFRunLoopWakeUpReliable` / `mach port` error logs?
-This is usually a **macOS InputMethodKit / TextKit** system log emitted while initializing the text input subsystem (this project does not print that string). In most cases it **does not affect functionality** and can be ignored.
+This is usually a **macOS InputMethodKit (IMK) / TextKit** system log emitted while initializing the text input subsystem (this project does not print that string). The message `error messaging the mach port for IMKCFRunLoopWakeUpReliable` generally means IMK attempted to wake a run loop / communicate via a Mach port and the port was unavailable. In most cases it **does not affect functionality** and can be ignored.
 
-If you need cleaner automation logs, consider:
-- Only checking `stdout` in tests/CI (split/filter `stderr` for known noisy strings)
-- Launching as a `.app bundle` (more macOS-native; also easier to have a proper Dock icon)
+Why it shows up here:
+- `mdview` renders with `NSTextView` (read-only, but still part of the text input system), so IMK may be initialized when the window/text system becomes active.
+
+What to do:
+- If IME composition (e.g. Zhuyin/Pinyin candidate window) works normally, treat it as benign noise.
+- If you need clean automation logs, prefer checking `stdout` only (or filter known-noisy `stderr` strings).
+- Launching as a `.app bundle` can reduce the likelihood (more macOS-native launch context).
+
+References (similar reports in other projects):
+- [electron/electron#45002](https://github.com/electron/electron/issues/45002)
+- [wezterm/wezterm#7249](https://github.com/wezterm/wezterm/issues/7249)
 
 ## In environments where the GUI subprocess cannot run
 By default, `make test` treats "mdview subprocess cannot execute" as a failure (to avoid hiding regressions). If you must skip in a special environment, use:
