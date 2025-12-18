@@ -88,6 +88,8 @@ final class NativeMarkdownView: NSView, MarkdownRenderable {
         textView.backgroundColor = NSColor.textBackgroundColor
         textView.textColor = NSColor.textColor
         textView.textContainerInset = NSSize(width: 28, height: 22)
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
         textView.linkTextAttributes = [
             .foregroundColor: NSColor.linkColor,
             .underlineStyle: NSUnderlineStyle.single.rawValue

@@ -166,6 +166,48 @@ class MenuBuilder {
             keyEquivalent: "a"
         )
         editMenu.addItem(selectAllItem)
+
+        editMenu.addItem(NSMenuItem.separator())
+
+        // Find submenu
+        let findItem = NSMenuItem(title: "Find", action: nil, keyEquivalent: "")
+        let findMenu = NSMenu(title: "Find")
+
+        let findPanelItem = NSMenuItem(
+            title: "Find…",
+            action: #selector(NSTextView.performFindPanelAction(_:)),
+            keyEquivalent: "f"
+        )
+        findPanelItem.tag = Int(NSTextFinder.Action.showFindInterface.rawValue)
+        findMenu.addItem(findPanelItem)
+
+        let findNextItem = NSMenuItem(
+            title: "Find Next",
+            action: #selector(NSTextView.performFindPanelAction(_:)),
+            keyEquivalent: "g"
+        )
+        findNextItem.tag = Int(NSTextFinder.Action.nextMatch.rawValue)
+        findMenu.addItem(findNextItem)
+
+        let findPrevItem = NSMenuItem(
+            title: "Find Previous",
+            action: #selector(NSTextView.performFindPanelAction(_:)),
+            keyEquivalent: "g"
+        )
+        findPrevItem.keyEquivalentModifierMask = [.command, .shift]
+        findPrevItem.tag = Int(NSTextFinder.Action.previousMatch.rawValue)
+        findMenu.addItem(findPrevItem)
+
+        let useSelectionItem = NSMenuItem(
+            title: "Use Selection for Find",
+            action: #selector(NSTextView.performFindPanelAction(_:)),
+            keyEquivalent: "e"
+        )
+        useSelectionItem.tag = Int(NSTextFinder.Action.setSearchString.rawValue)
+        findMenu.addItem(useSelectionItem)
+
+        findItem.submenu = findMenu
+        editMenu.addItem(findItem)
         
         editMenuItem.submenu = editMenu
         return editMenuItem
