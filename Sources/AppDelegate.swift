@@ -165,6 +165,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if isAutomationMode { return false }
         if CommandLine.arguments.contains("--no-activate") { return false }
 
+        // Detached child process spawned by the parent should always activate (user explicitly launched it).
+        if CommandLine.arguments.contains("--child-gui") { return true }
+
         // If stdin is not a TTY (e.g. launched by CI/test runner), don't activate.
         if isatty(STDIN_FILENO) == 0 { return false }
 
