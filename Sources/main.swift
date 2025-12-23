@@ -225,6 +225,7 @@ func spawnDetachedGUIProcessAndExit() {
 
     let child = Process()
     child.executableURL = exeURL
+    child.currentDirectoryURL = cwdURL
     child.arguments = Array(args.dropFirst()) + ["--child-gui"]
     child.standardOutput = FileHandle.nullDevice
     child.standardError = FileHandle.nullDevice
