@@ -941,12 +941,13 @@ private final class NativeMarkdownParser {
     
     private func renderHorizontalRule() -> NSAttributedString {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
+        paragraphStyle.alignment = .left
         paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
         paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
         paragraphStyle.paragraphSpacing = 10
-        
-        return NSAttributedString(string: "──────────", attributes: [
+
+        // Use a long horizontal line to fill the width
+        return NSAttributedString(string: String(repeating: "─", count: 100), attributes: [
             .font: theme.paragraphFont,
             .foregroundColor: theme.secondaryTextColor,
             .paragraphStyle: paragraphStyle

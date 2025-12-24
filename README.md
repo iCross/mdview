@@ -54,6 +54,10 @@ make smoke
 - `Sources/MenuBuilder.swift`: menus / shortcuts
 - `Tests/test_runner.swift`: test entry point
 
+## Development notes
+- **CLI flags**: If you add/change CLI flags, update `--help` in `Sources/main.swift` and test coverage in `Tests/test_runner.swift`.
+- **Layout changes**: If you change layout (quote/table/code block), add at least one regression test via `--render-text` and `--screenshot-scroll-to`.
+
 ## FAQ
 ### Why do I see `IMKCFRunLoopWakeUpReliable` / `mach port` error logs?
 This is usually a **macOS InputMethodKit (IMK) / TextKit** system log emitted while initializing the text input subsystem (this project does not print that string). The message `error messaging the mach port for IMKCFRunLoopWakeUpReliable` generally means IMK attempted to wake a run loop / communicate via a Mach port and the port was unavailable. In most cases it **does not affect functionality** and can be ignored.
