@@ -221,10 +221,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         // AppKit may feed some "non-option argv" as `openFile` events.
-        // Only accept Markdown here; otherwise a path like `--screenshot <out.png>` could be misinterpreted as a document.
+        // Only accept Markdown and text files here; otherwise a path like `--screenshot <out.png>` could be misinterpreted as a document.
         let lower = filename.lowercased()
-        let isMarkdown = lower.hasSuffix(".md") || lower.hasSuffix(".markdown")
-        if !isMarkdown { return false }
+        let isSupported = lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
+        if !isSupported { return false }
 
         // We may receive multiple `openFile` calls (e.g. multi-select in Finder), so keep an array.
         if !didBootstrap || windowControllers.isEmpty {
@@ -295,7 +295,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let cliFiles = cli.compactMap { arg -> String? in
             if arg.hasPrefix("-") { return nil }
             let lower = arg.lowercased()
-            return (lower.hasSuffix(".md") || lower.hasSuffix(".markdown")) ? String(arg) : nil
+            return (lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")) ? String(arg) : nil
         }
         toOpen.append(contentsOf: cliFiles)
         
@@ -309,10 +309,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         if isScreenshot {
-            // Pick only the first Markdown file; if none, show the welcome page (still screenshot-able).
+            // Pick only the first supported file; if none, show the welcome page (still screenshot-able).
             if let firstMarkdown = toOpen.first(where: { p in
                 let lower = p.lowercased()
-                return lower.hasSuffix(".md") || lower.hasSuffix(".markdown")
+                return lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
             }) {
                 openNewWindow(path: firstMarkdown, makeKey: true)
             } else {

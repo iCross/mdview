@@ -90,7 +90,7 @@ final class MarkdownWindowController: NSObject {
         }
 
         currentFilePath = absolutePath
-        window.title = "Markdown Viewer - \((absolutePath as NSString).lastPathComponent)"
+        window.title = (absolutePath as NSString).lastPathComponent
         rendererView.setDocumentURL(URL(fileURLWithPath: absolutePath))
         rendererView.renderMarkdown(content)
 
