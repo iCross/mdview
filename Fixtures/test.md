@@ -96,3 +96,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 - [x] Build the basic structure
 - [x] Implement native rendering
 - [ ] Add more features
+
+## Horizontal lines
+
+Horizontal line using three hyphens:
+
+---
+
+Text before horizontal line.
+
+---
+
+Text after horizontal line.
