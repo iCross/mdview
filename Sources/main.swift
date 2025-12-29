@@ -208,6 +208,26 @@ if args.contains("--highlightr-check") {
     }
 }
 
+// Check for file existence before launching
+let potentialFiles = args.dropFirst().filter { arg in
+    if arg.hasPrefix("-") { return false }
+    let lower = arg.lowercased()
+    return lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
+}
+
+if !potentialFiles.isEmpty {
+    let handler = FileHandler()
+    let fm = FileManager.default
+    for fileArg in potentialFiles {
+        let absPath = handler.resolveAbsolutePath(fileArg)
+        var isDir: ObjCBool = false
+        if !fm.fileExists(atPath: absPath, isDirectory: &isDir) || isDir.boolValue {
+            fputs("Error: File not found: \(fileArg)\n", stderr)
+            exit(1)
+        }
+    }
+}
+
 func shouldStayAttachedToTerminal(_ args: [String]) -> Bool {
     if args.contains("--smoke-test") { return true }
     // Screenshot-related workflows are typically used in scripts and should block until completion.
