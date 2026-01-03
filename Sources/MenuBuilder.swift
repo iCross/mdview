@@ -159,6 +159,15 @@ class MenuBuilder {
         )
         editMenu.addItem(copyItem)
         
+        // Copy Full Content
+        let copyFullContentItem = NSMenuItem(
+            title: "Copy Full Content",
+            action: #selector(AppDelegate.copyFullContent),
+            keyEquivalent: "C" // Capital C means Cmd+Shift+C
+        )
+        copyFullContentItem.target = appDelegate
+        editMenu.addItem(copyFullContentItem)
+        
         // Select All
         let selectAllItem = NSMenuItem(
             title: "Select All",

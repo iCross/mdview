@@ -107,6 +107,18 @@ final class MarkdownWindowController: NSObject {
     func resetZoom() { rendererView.resetZoom() }
     func rerender() { rendererView.rerender() }
 
+    @objc func copyFullContent() {
+        guard let path = currentFilePath else { return }
+        guard let content = fileHandler.readFile(at: path) else {
+            showError("Failed to read file: \(path)")
+            return
+        }
+        
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(content, forType: .string)
+    }
+
     private func showError(_ message: String) {
         let alert = NSAlert()
         alert.messageText = "Error"

@@ -353,6 +353,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func reloadCurrentFile() {
         activeWindowController()?.reloadCurrentFile()
     }
+
+    @objc func copyFullContent() {
+        activeWindowController()?.copyFullContent()
+    }
     
     @objc func openFile() {
         let panel = NSOpenPanel()
@@ -532,6 +536,8 @@ extension AppDelegate: NSMenuItemValidation {
             menuItem.state = (currentThemePreference() == .light) ? .on : .off
         } else if menuItem.action == #selector(setThemeDark) {
             menuItem.state = (currentThemePreference() == .dark) ? .on : .off
+        } else if menuItem.action == #selector(copyFullContent) {
+            return activeWindowController()?.currentFilePath != nil
         }
         return true
     }
