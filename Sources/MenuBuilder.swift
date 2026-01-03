@@ -308,6 +308,14 @@ class MenuBuilder {
         )
         windowMenu.addItem(zoomItem)
         
+        // Merge All Windows (Tabs)
+        let mergeItem = NSMenuItem(
+            title: "Merge All Windows",
+            action: #selector(NSWindow.mergeAllWindows(_:)),
+            keyEquivalent: ""
+        )
+        windowMenu.addItem(mergeItem)
+        
         windowMenu.addItem(NSMenuItem.separator())
         
         // Bring All to Front

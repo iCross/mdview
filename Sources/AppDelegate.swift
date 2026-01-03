@@ -122,6 +122,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         bootstrapIfNeeded()
+        
+        IPC.startServer { [weak self] paths in
+            guard let self = self else { return }
+            NSApp.activate(ignoringOtherApps: true)
+            
+            for path in paths {
+                self.openNewWindow(path: path, makeKey: true)
+            }
+        }
     }
     
     /// Used for the "not a .app bundle, executed directly from CLI" launch path:

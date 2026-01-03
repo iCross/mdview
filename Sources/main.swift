@@ -144,6 +144,25 @@ if args.contains("--help") || args.contains("-h") {
     exit(0)
 }
 
+// Single Instance Check (Client)
+// Only attempt if we are not a child process and not in a special debug/wait/automation mode.
+if !isChildGUI && !wantsWait && !shouldStayAttachedToTerminal(args) {
+    // Filter for file arguments only
+    let filesToSend = args.dropFirst().filter { arg in
+        if arg.hasPrefix("-") { return false }
+        let lower = arg.lowercased()
+        return lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
+    }.map { FileHandler().resolveAbsolutePath(String($0)) }
+    
+    // Even if no files (just focusing the app), we can send an empty list or handle it.
+    // If filesToSend is empty but we just ran `mdview`, we might want to bring it to front.
+    // Let's attempt to send.
+    if IPC.sendToRunningInstance(filePaths: filesToSend) {
+        // Successfully sent to existing instance. Exit.
+        exit(0)
+    }
+}
+
 // --dump=path or --dump path
 if let dumpArg = args.first(where: { $0.hasPrefix("--dump=") }) {
     let path = dumpArg.replacingOccurrences(of: "--dump=", with: "")
