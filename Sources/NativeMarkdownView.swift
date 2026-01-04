@@ -1246,7 +1246,30 @@ private final class NativeMarkdownParser {
         // images：![alt](url)
         applyInlineImages(in: attributed, baseAttributes: baseAttributes)
         
-        // code span：`code`
+        // Special case: **`code`** (bold code span) - handle before regular code spans and bold
+        if let regex = try? NSRegularExpression(pattern: "\\*\\*`([^`]+)`\\*\\*", options: []) {
+            let s = attributed.string
+            let matches = regex.matches(in: s, options: [], range: NSRange(location: 0, length: (s as NSString).length))
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2 else { continue }
+                let fullRange = match.range(at: 0)
+                let codeRange = match.range(at: 1)
+                if fullRange.location == NSNotFound || codeRange.location == NSNotFound { continue }
+                
+                let codeText = (s as NSString).substring(with: codeRange)
+                let baseFont = (baseAttributes[.font] as? NSFont) ?? theme.paragraphFont
+                attributed.replaceCharacters(in: fullRange, with: codeText)
+                let newRange = NSRange(location: fullRange.location, length: (codeText as NSString).length)
+                attributed.addAttributes([
+                    .font: theme.monoFont(ofSize: baseFont.pointSize, weight: .semibold),
+                    .backgroundColor: theme.codeBackgroundColor,
+                    .foregroundColor: theme.textColor,
+                    Self.isCodeAttribute: true
+                ], range: newRange)
+            }
+        }
+        
+        // code span：`code` (regular, not bold)
         applyInlinePattern(
             pattern: "`([^`]+)`",
             in: attributed,
@@ -1259,6 +1282,24 @@ private final class NativeMarkdownParser {
                 .foregroundColor: theme.textColor,
                 Self.isCodeAttribute: true
             ], range: range)
+        }
+        
+        // bold：**text** / __text__ (skip code spans)
+        applyInlinePattern(
+            pattern: "\\*\\*(.+?)\\*\\*",
+            in: attributed,
+            replaceWithCapture: 1,
+            skipIfInsideCode: true
+        ) { range in
+            attributed.addAttributes([.font: theme.boldFont], range: range)
+        }
+        applyInlinePattern(
+            pattern: "__(.+?)__",
+            in: attributed,
+            replaceWithCapture: 1,
+            skipIfInsideCode: true
+        ) { range in
+            attributed.addAttributes([.font: theme.boldFont], range: range)
         }
         
         // links：[text](url)
@@ -1288,24 +1329,6 @@ private final class NativeMarkdownParser {
             attributed.addAttributes([
                 .strikethroughStyle: NSUnderlineStyle.single.rawValue
             ], range: range)
-        }
-        
-        // bold：**text** / __text__
-        applyInlinePattern(
-            pattern: "\\*\\*(.+?)\\*\\*",
-            in: attributed,
-            replaceWithCapture: 1,
-            skipIfInsideCode: true
-        ) { range in
-            attributed.addAttributes([.font: theme.boldFont], range: range)
-        }
-        applyInlinePattern(
-            pattern: "__(.+?)__",
-            in: attributed,
-            replaceWithCapture: 1,
-            skipIfInsideCode: true
-        ) { range in
-            attributed.addAttributes([.font: theme.boldFont], range: range)
         }
         
         // italic：*text* / _text_

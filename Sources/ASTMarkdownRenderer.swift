@@ -123,8 +123,12 @@ struct ASTMarkdownRenderer {
 
         mutating func visitInlineCode(_ inlineCode: InlineCode) {
             let baseFont = (currentAttributes[.font] as? NSFont) ?? theme.paragraphFont
+            // Check if the current font is bold (e.g., when inside **`code`**)
+            let isBold = baseFont.fontDescriptor.symbolicTraits.contains(.bold) || 
+                        baseFont == theme.boldFont
+            let weight: NSFont.Weight = isBold ? .semibold : .regular
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: theme.monoFont(ofSize: baseFont.pointSize),
+                .font: theme.monoFont(ofSize: baseFont.pointSize, weight: weight),
                 .foregroundColor: theme.textColor,
                 .backgroundColor: theme.codeBackgroundColor,
                 .paragraphStyle: theme.baseParagraphStyle
