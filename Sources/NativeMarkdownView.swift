@@ -945,8 +945,9 @@ private final class NativeMarkdownParser {
         paragraphStyle.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
         paragraphStyle.lineSpacing = theme.baseParagraphStyle.lineSpacing
         paragraphStyle.paragraphSpacing = 10
+        paragraphStyle.lineBreakMode = .byClipping
 
-        // Use a long horizontal line to fill the width
+        // Use a long horizontal line; clipping prevents wrap on narrow widths.
         return NSAttributedString(string: String(repeating: "─", count: 100), attributes: [
             .font: theme.paragraphFont,
             .foregroundColor: theme.secondaryTextColor,

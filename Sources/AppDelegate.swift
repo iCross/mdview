@@ -100,6 +100,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return 1.0
     }
     
+    private var isChildGUI: Bool {
+        CommandLine.arguments.contains("--child-gui")
+    }
+
     private var didBootstrap: Bool = false
 
     private var preferredNativePipeline: NativeMarkdownPipeline {
@@ -227,6 +231,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
     }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            openNewWindow(path: nil, makeKey: true)
+        }
+        return true
+    }
     
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         // AppKit may feed some "non-option argv" as `openFile` events.
@@ -330,11 +341,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         
-        if toOpen.isEmpty {
-            openNewWindow(path: nil, makeKey: true)
-        } else {
-            for (idx, p) in toOpen.enumerated() {
-                openNewWindow(path: p, makeKey: idx == 0)
+        for (idx, p) in toOpen.enumerated() {
+            openNewWindow(path: p, makeKey: idx == 0)
+        }
+
+        // If no files were opened:
+        // 1. If it was a "naked" launch (no file arguments at all), show the welcome page.
+        // 2. Otherwise (tried to open files but none were supported), stay quiet and exit if in CLI mode.
+        if windowControllers.isEmpty {
+            let nonFlagArgs = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") }
+            if nonFlagArgs.isEmpty && !isScreenshot && !isSmokeTestMode {
+                openNewWindow(path: nil, makeKey: true)
+            } else if isChildGUI && !isSmokeTestMode {
+                NSApp.terminate(nil)
             }
         }
     }

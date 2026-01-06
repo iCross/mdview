@@ -228,10 +228,15 @@ if args.contains("--highlightr-check") {
 }
 
 // Check for file existence before launching
-let potentialFiles = args.dropFirst().filter { arg in
-    if arg.hasPrefix("-") { return false }
+let nonFlagArgs = args.dropFirst().filter { !$0.hasPrefix("-") }
+let potentialFiles = nonFlagArgs.filter { arg in
     let lower = arg.lowercased()
     return lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
+}
+
+if !nonFlagArgs.isEmpty && potentialFiles.isEmpty {
+    fputs("Error: No supported files found in arguments (.md, .markdown, .txt)\n", stderr)
+    exit(1)
 }
 
 if !potentialFiles.isEmpty {
@@ -249,6 +254,14 @@ if !potentialFiles.isEmpty {
 
 func shouldStayAttachedToTerminal(_ args: [String]) -> Bool {
     if args.contains("--smoke-test") { return true }
+    
+    // CLI/test-only modes: run in this process to avoid handing off to an older running instance.
+    let hasDump = args.contains("--dump") || args.contains(where: { $0.hasPrefix("--dump=") })
+    let hasRenderText = args.contains("--render-text") || args.contains(where: { $0.hasPrefix("--render-text=") })
+    if hasDump || hasRenderText { return true }
+    if args.contains("--skeleton-check") { return true }
+    if args.contains("--highlightr-check") { return true }
+    
     // Screenshot-related workflows are typically used in scripts and should block until completion.
     if args.contains(where: { $0.hasPrefix("--screenshot") }) { return true }
     if args.contains("--screenshot-full") { return true }

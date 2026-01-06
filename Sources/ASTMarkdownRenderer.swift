@@ -100,6 +100,25 @@ struct ASTMarkdownRenderer {
             out.append(NSAttributedString(string: "\n", attributes: currentAttributes))
         }
 
+        mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) {
+            let p = NSMutableParagraphStyle()
+            p.alignment = .left
+            p.lineHeightMultiple = theme.baseParagraphStyle.lineHeightMultiple
+            p.lineSpacing = theme.baseParagraphStyle.lineSpacing
+            p.paragraphSpacing = 10
+            p.lineBreakMode = .byClipping
+
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: theme.paragraphFont,
+                .foregroundColor: theme.secondaryTextColor,
+                .paragraphStyle: p
+            ]
+
+            // Use a long horizontal line; clipping prevents wrap on narrow widths.
+            out.append(NSAttributedString(string: String(repeating: "─", count: 100), attributes: attrs))
+            out.append(NSAttributedString(string: "\n", attributes: attrs))
+        }
+
         mutating func visitEmphasis(_ emphasis: Emphasis) {
             let prev = currentAttributes
             currentAttributes[.font] = theme.italicFont

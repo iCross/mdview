@@ -1,7 +1,7 @@
 # mdview (`mdview`) — LLM project entry
 
 ## Purpose
-macOS Markdown reader (AppKit). **Read-only**: reads local `.md`/`.markdown`, renders to a window, supports drag & drop and auto-reload on file changes.
+macOS Markdown reader (AppKit). **Read-only**: reads local `.md` / `.markdown` (and plain `.txt` as text), renders to a window, supports drag & drop and auto-reload on file changes.
 
 ## Most used commands
 ```bash
@@ -32,6 +32,7 @@ make smoke
   - `--render-text <file.md>` (print rendered plain text; deterministic regression)
   - `--skeleton-check` (width skeleton regression check: avoid per-character wrapping)
   - `--highlightr-check` (verify Highlightr / JSCore / resources)
+  - Note: these debug/test flags always run in the current process (no handoff to an existing instance) to ensure you exercise the latest build.
 
 ## Test output contract (for automation/LLM)
 - **screenshot**: stdout prints
@@ -44,6 +45,10 @@ make smoke
 ## Important invariants (common regression sources)
 - **No per-character wrapping**: `NSTextContainer` width must track `NSScrollView` visible width, and geometry changes must force reflow (see `NativeMarkdownView.syncTextContainerWidth()`).
 - **All automation paths must have timeouts**: tests and screenshot/smoke must exit on their own (Makefile / test runner use timeout + kill).
+- **Horizontal rules (---)**:
+  - Render as a long left-aligned line of 100 `─` characters with `.byClipping` to avoid wrapping on narrow widths.
+  - Update both `NativeMarkdownView.renderHorizontalRule()` (regex pipeline) and `ASTMarkdownRenderer.visitThematicBreak` (AST pipeline) together if you change length or styling.
+  - Regex pipeline currently triggers on trimmed lines exactly equal to `---`, `----`, or `-----`; other HR forms (e.g., `* * *`, `___`) are ignored.
 
 ## Code entry points (recommended reading order)
 - `Sources/main.swift`: CLI flags / test-mode entry points
