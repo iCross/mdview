@@ -129,10 +129,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         IPC.startServer { [weak self] paths in
             guard let self = self else { return }
-            NSApp.activate(ignoringOtherApps: true)
+            
+            // Bring app to front
+            let shouldActivate = (!self.isAutomationMode) && self.shouldActivateAppInThisSession()
+            if shouldActivate {
+                NSApp.activate(ignoringOtherApps: true)
+            }
             
             for path in paths {
-                self.openNewWindow(path: path, makeKey: true)
+                let absPath = FileHandler().resolveAbsolutePath(path)
+                
+                // If the file is already open in a window, reload it instead of opening a new one.
+                if let existingController = self.windowControllers.first(where: { $0.currentFilePath == absPath }) {
+                    existingController.reloadCurrentFile()
+                    if shouldActivate {
+                        existingController.show(activate: true)
+                    }
+                } else {
+                    self.openNewWindow(path: absPath, makeKey: true)
+                }
             }
         }
     }

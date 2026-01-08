@@ -1285,23 +1285,8 @@ private final class NativeMarkdownParser {
             ], range: range)
         }
         
-        // bold：**text** / __text__ (skip code spans)
-        applyInlinePattern(
-            pattern: "\\*\\*(.+?)\\*\\*",
-            in: attributed,
-            replaceWithCapture: 1,
-            skipIfInsideCode: true
-        ) { range in
-            attributed.addAttributes([.font: theme.boldFont], range: range)
-        }
-        applyInlinePattern(
-            pattern: "__(.+?)__",
-            in: attributed,
-            replaceWithCapture: 1,
-            skipIfInsideCode: true
-        ) { range in
-            attributed.addAttributes([.font: theme.boldFont], range: range)
-        }
+        // bold：**text** / __text__ (allow inline code inside)
+        applyBold(in: attributed)
         
         // links：[text](url)
         applyInlinePattern(
@@ -1352,6 +1337,38 @@ private final class NativeMarkdownParser {
         }
         
         return attributed
+    }
+    
+    private func applyBold(in attributed: NSMutableAttributedString) {
+        applyBold(pattern: "\\*\\*(.+?)\\*\\*", in: attributed)
+        applyBold(pattern: "__(.+?)__", in: attributed)
+    }
+    
+    private func applyBold(pattern: String, in attributed: NSMutableAttributedString) {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return }
+        
+        let s = attributed.string
+        let matches = regex.matches(in: s, options: [], range: NSRange(location: 0, length: (s as NSString).length))
+        guard !matches.isEmpty else { return }
+        
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2 else { continue }
+            let fullRange = match.range(at: 0)
+            let innerRange = match.range(at: 1)
+            if fullRange.location == NSNotFound || innerRange.location == NSNotFound { continue }
+            
+            // Remove closing markers first, then opening markers to preserve inner attributes.
+            attributed.deleteCharacters(in: NSRange(location: fullRange.location + fullRange.length - 2, length: 2))
+            attributed.deleteCharacters(in: NSRange(location: fullRange.location, length: 2))
+            
+            let adjustedInnerRange = NSRange(location: fullRange.location, length: innerRange.length)
+            attributed.enumerateAttribute(Self.isCodeAttribute, in: adjustedInnerRange, options: []) { value, range, _ in
+                // Keep code spans monospace; bold only the surrounding text.
+                if value == nil {
+                    attributed.addAttribute(.font, value: theme.boldFont, range: range)
+                }
+            }
+        }
     }
 
     private func applyInlineImages(in attributed: NSMutableAttributedString, baseAttributes: [NSAttributedString.Key: Any]) {

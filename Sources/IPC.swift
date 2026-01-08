@@ -53,18 +53,26 @@ class IPC {
             copyDescription: nil
         )
         
-        guard let localPort = CFMessagePortCreateLocal(
+        // Ensure any previous port with the same name is invalidated if possible
+        // (though local ports usually die with the process).
+        
+        let localPort = CFMessagePortCreateLocal(
             nil,
             portName as CFString,
             callback,
             &context,
             nil
-        ) else {
-            print("WARN: Failed to create local IPC port. Single instance mode may not work.")
+        )
+        
+        guard let port = localPort else {
+            // If we fail to create the port, it might already exist or be restricted.
+            // On macOS, CFMessagePortCreateLocal can fail if the name is taken.
+            fputs("WARN: Failed to create local IPC port '\(portName)'. Single instance mode may not work.\n", stderr)
             return
         }
         
-        guard let source = CFMessagePortCreateRunLoopSource(nil, localPort, 0) else {
+        guard let source = CFMessagePortCreateRunLoopSource(nil, port, 0) else {
+            fputs("WARN: Failed to create RunLoop source for IPC port.\n", stderr)
             return
         }
         

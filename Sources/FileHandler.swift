@@ -56,7 +56,7 @@ class FileHandler {
         
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fileDescriptor,
-            eventMask: [.write, .rename, .delete],
+            eventMask: [.write, .extend, .rename, .delete],
             queue: DispatchQueue.global(qos: .utility)
         )
         
@@ -69,14 +69,15 @@ class FileHandler {
                 // File deleted or renamed; try to re-establish the watch.
                 self.stopWatching()
                 
-                // Retry later (some editors rewrite files atomically).
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                // Retry later (some editors and redirections rewrite files atomically).
+                // Use a slightly shorter delay for better responsiveness.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                     if FileManager.default.fileExists(atPath: path) {
                         self?.startWatching(path: path)
                         self?.delegate?.fileDidChange(at: path)
                     }
                 }
-            } else if flags.contains(.write) {
+            } else if flags.contains(.write) || flags.contains(.extend) {
                 self.delegate?.fileDidChange(at: path)
             }
         }
