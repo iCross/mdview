@@ -148,11 +148,31 @@ if args.contains("--help") || args.contains("-h") {
 // Only attempt if we are not a child process and not in a special debug/wait/automation mode.
 if !isChildGUI && !wantsWait && !shouldStayAttachedToTerminal(args) {
     // Filter for file arguments only
-    let filesToSend = args.dropFirst().filter { arg in
-        if arg.hasPrefix("-") { return false }
+    let nonFlagArgsForIPC = args.dropFirst().filter { !$0.hasPrefix("-") }
+    let potentialFilesForIPC = nonFlagArgsForIPC.filter { arg in
         let lower = arg.lowercased()
         return lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
-    }.map { FileHandler().resolveAbsolutePath(String($0)) }
+    }
+
+    if !nonFlagArgsForIPC.isEmpty && potentialFilesForIPC.isEmpty {
+        fputs("Error: No supported files found in arguments (.md, .markdown, .txt)\n", stderr)
+        exit(1)
+    }
+
+    let handler = FileHandler()
+    if !potentialFilesForIPC.isEmpty {
+        let fm = FileManager.default
+        for fileArg in potentialFilesForIPC {
+            let absPath = handler.resolveAbsolutePath(fileArg)
+            var isDir: ObjCBool = false
+            if !fm.fileExists(atPath: absPath, isDirectory: &isDir) || isDir.boolValue {
+                fputs("Error: File not found: \(fileArg)\n", stderr)
+                exit(1)
+            }
+        }
+    }
+
+    let filesToSend = potentialFilesForIPC.map { handler.resolveAbsolutePath(String($0)) }
     
     // Even if no files (just focusing the app), we can send an empty list or handle it.
     // If filesToSend is empty but we just ran `mdview`, we might want to bring it to front.
