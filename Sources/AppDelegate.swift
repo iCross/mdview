@@ -5,101 +5,62 @@ import Foundation
 import Darwin
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    
+
     // MARK: - Properties
-    
+
     var menuBuilder: MenuBuilder!
-    
+
     private var windowControllers: [MarkdownWindowController] = []
     private var pendingFilePaths: [String] = []  // File paths received before bootstrap (can be multiple)
-    
+
     private var isSmokeTestMode: Bool {
         CommandLine.arguments.contains("--smoke-test")
     }
 
     private var isAutomationMode: Bool {
-        // For CI/automation: avoid foreground behaviors that may hang or be rejected (e.g. activate)
         isSmokeTestMode || (screenshotOutputPath != nil)
     }
 
-    private var screenshotOutputPath: String? {
-        // Supports:
-        // - --screenshot /path/to/out.png
-        // - --screenshot=/path/to/out.png
+    // MARK: - CLI Argument Parsing Helpers
+
+    private func parseFlag(_ flag: String, equalsSeparator: String = "=") -> String? {
         let args = CommandLine.arguments
-        if let arg = args.first(where: { $0.hasPrefix("--screenshot=") }) {
-            let path = arg.replacingOccurrences(of: "--screenshot=", with: "")
-            return path.isEmpty ? nil : path
+        let prefix = "\(flag)\(equalsSeparator)"
+        if let arg = args.first(where: { $0.hasPrefix(prefix) }) {
+            let value = arg.replacingOccurrences(of: prefix, with: "")
+            return value.isEmpty ? nil : value
         }
-        if let idx = args.firstIndex(of: "--screenshot") {
-            let next = idx + 1
-            guard next < args.count else { return nil }
-            let path = args[next]
-            return path.hasPrefix("-") ? nil : path
+        if let idx = args.firstIndex(of: flag), idx + 1 < args.count {
+            let value = args[idx + 1]
+            return value.hasPrefix("-") ? nil : value
         }
         return nil
+    }
+
+    private var screenshotOutputPath: String? {
+        parseFlag("--screenshot")
     }
 
     private var screenshotIsFull: Bool {
         CommandLine.arguments.contains("--screenshot-full")
     }
 
-    private func parseValueAfterFlag(_ flag: String, in args: [String]) -> String? {
-        guard let idx = args.firstIndex(of: flag) else { return nil }
-        let next = idx + 1
-        guard next < args.count else { return nil }
-        let v = args[next]
-        return v.hasPrefix("-") ? nil : v
-    }
-
     private var screenshotScrollToText: String? {
-        // Supports:
-        // - --screenshot-scroll-to <text>
-        // - --screenshot-scroll-to=<text>
-        let args = CommandLine.arguments
-        if let arg = args.first(where: { $0.hasPrefix("--screenshot-scroll-to=") }) {
-            let v = arg.replacingOccurrences(of: "--screenshot-scroll-to=", with: "")
-            return v.isEmpty ? nil : v
-        }
-        if args.contains("--screenshot-scroll-to"), let v = parseValueAfterFlag("--screenshot-scroll-to", in: args) {
-            return v
-        }
-        return nil
+        parseFlag("--screenshot-scroll-to")
     }
 
     private var screenshotScrollY: CGFloat? {
-        // Supports:
-        // - --screenshot-scroll-y <number>
-        // - --screenshot-scroll-y=<number>
-        let args = CommandLine.arguments
-        if let arg = args.first(where: { $0.hasPrefix("--screenshot-scroll-y=") }) {
-            let v = arg.replacingOccurrences(of: "--screenshot-scroll-y=", with: "")
-            if v.isEmpty { return nil }
-            if let d = Double(v) { return CGFloat(d) }
-            return nil
-        }
-        if args.contains("--screenshot-scroll-y"), let v = parseValueAfterFlag("--screenshot-scroll-y", in: args) {
-            if let d = Double(v) { return CGFloat(d) }
-            return nil
-        }
-        return nil
+        guard let value = parseFlag("--screenshot-scroll-y"),
+              let d = Double(value) else { return nil }
+        return CGFloat(d)
     }
 
     private var screenshotDelaySeconds: TimeInterval {
-        // Supports: --screenshot-delay=1.2 or --screenshot-delay 1.2
-        let args = CommandLine.arguments
-        if let arg = args.first(where: { $0.hasPrefix("--screenshot-delay=") }) {
-            let v = arg.replacingOccurrences(of: "--screenshot-delay=", with: "")
-            return TimeInterval(v) ?? 1.0
-        }
-        if let idx = args.firstIndex(of: "--screenshot-delay") {
-            let next = idx + 1
-            guard next < args.count else { return 1.0 }
-            return TimeInterval(args[next]) ?? 1.0
-        }
-        return 1.0
+        guard let value = parseFlag("--screenshot-delay"),
+              let delay = TimeInterval(value) else { return 1.0 }
+        return delay
     }
-    
+
     private var isChildGUI: Bool {
         CommandLine.arguments.contains("--child-gui")
     }
@@ -107,16 +68,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var didBootstrap: Bool = false
 
     private var preferredNativePipeline: NativeMarkdownPipeline {
-        // Supports:
-        // - --pipeline=regex|ast
-        // - --ast (same as --pipeline=ast)
         let args = CommandLine.arguments
-        if let pipelineArg = args.first(where: { $0.hasPrefix("--pipeline=") }) {
-            let value = pipelineArg.replacingOccurrences(of: "--pipeline=", with: "").lowercased()
+        if let value = parseFlag("--pipeline")?.lowercased() {
             return NativeMarkdownPipeline(rawValue: value) ?? .regex
-        }
-        if args.contains("--pipeline"), let v = parseValueAfterFlag("--pipeline", in: args)?.lowercased() {
-            return NativeMarkdownPipeline(rawValue: v) ?? .regex
         }
         if args.contains("--ast") { return .ast }
         return .regex

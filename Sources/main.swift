@@ -144,41 +144,43 @@ if args.contains("--help") || args.contains("-h") {
     exit(0)
 }
 
-// Single Instance Check (Client)
+// MARK: - File validation helper
+
+func isSupportedFile(_ arg: String) -> Bool {
+    let lower = arg.lowercased()
+    return lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
+}
+
+func validateAndResolveFiles(_ fileArgs: [String]) -> [String] {
+    let handler = FileHandler()
+    let fm = FileManager.default
+    var resolved: [String] = []
+    for fileArg in fileArgs {
+        let absPath = handler.resolveAbsolutePath(fileArg)
+        var isDir: ObjCBool = false
+        if !fm.fileExists(atPath: absPath, isDirectory: &isDir) || isDir.boolValue {
+            fputs("Error: File not found: \(fileArg)\n", stderr)
+            exit(1)
+        }
+        resolved.append(absPath)
+    }
+    return resolved
+}
+
+// MARK: - Single Instance Check (Client)
 // Only attempt if we are not a child process and not in a special debug/wait/automation mode.
 if !isChildGUI && !wantsWait && !shouldStayAttachedToTerminal(args) {
-    // Filter for file arguments only
-    let nonFlagArgsForIPC = args.dropFirst().filter { !$0.hasPrefix("-") }
-    let potentialFilesForIPC = nonFlagArgsForIPC.filter { arg in
-        let lower = arg.lowercased()
-        return lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
-    }
+    let nonFlagArgs = args.dropFirst().filter { !$0.hasPrefix("-") }
+    let potentialFiles = nonFlagArgs.filter { isSupportedFile($0) }
 
-    if !nonFlagArgsForIPC.isEmpty && potentialFilesForIPC.isEmpty {
+    if !nonFlagArgs.isEmpty && potentialFiles.isEmpty {
         fputs("Error: No supported files found in arguments (.md, .markdown, .txt)\n", stderr)
         exit(1)
     }
 
-    let handler = FileHandler()
-    if !potentialFilesForIPC.isEmpty {
-        let fm = FileManager.default
-        for fileArg in potentialFilesForIPC {
-            let absPath = handler.resolveAbsolutePath(fileArg)
-            var isDir: ObjCBool = false
-            if !fm.fileExists(atPath: absPath, isDirectory: &isDir) || isDir.boolValue {
-                fputs("Error: File not found: \(fileArg)\n", stderr)
-                exit(1)
-            }
-        }
-    }
+    let filesToSend = potentialFiles.isEmpty ? [] : validateAndResolveFiles(potentialFiles.map { String($0) })
 
-    let filesToSend = potentialFilesForIPC.map { handler.resolveAbsolutePath(String($0)) }
-    
-    // Even if no files (just focusing the app), we can send an empty list or handle it.
-    // If filesToSend is empty but we just ran `mdview`, we might want to bring it to front.
-    // Let's attempt to send.
     if IPC.sendToRunningInstance(filePaths: filesToSend) {
-        // Successfully sent to existing instance. Exit.
         exit(0)
     }
 }
@@ -247,28 +249,18 @@ if args.contains("--highlightr-check") {
     }
 }
 
-// Check for file existence before launching
-let nonFlagArgs = args.dropFirst().filter { !$0.hasPrefix("-") }
-let potentialFiles = nonFlagArgs.filter { arg in
-    let lower = arg.lowercased()
-    return lower.hasSuffix(".md") || lower.hasSuffix(".markdown") || lower.hasSuffix(".txt")
-}
+// Check for file existence before launching (for modes that weren't handled by the IPC block above)
+do {
+    let nonFlagArgs = args.dropFirst().filter { !$0.hasPrefix("-") }
+    let potentialFiles = nonFlagArgs.filter { isSupportedFile($0) }
 
-if !nonFlagArgs.isEmpty && potentialFiles.isEmpty {
-    fputs("Error: No supported files found in arguments (.md, .markdown, .txt)\n", stderr)
-    exit(1)
-}
+    if !nonFlagArgs.isEmpty && potentialFiles.isEmpty {
+        fputs("Error: No supported files found in arguments (.md, .markdown, .txt)\n", stderr)
+        exit(1)
+    }
 
-if !potentialFiles.isEmpty {
-    let handler = FileHandler()
-    let fm = FileManager.default
-    for fileArg in potentialFiles {
-        let absPath = handler.resolveAbsolutePath(fileArg)
-        var isDir: ObjCBool = false
-        if !fm.fileExists(atPath: absPath, isDirectory: &isDir) || isDir.boolValue {
-            fputs("Error: File not found: \(fileArg)\n", stderr)
-            exit(1)
-        }
+    if !potentialFiles.isEmpty {
+        _ = validateAndResolveFiles(potentialFiles.map { String($0) })
     }
 }
 

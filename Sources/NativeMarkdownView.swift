@@ -1028,50 +1028,9 @@ private final class NativeMarkdownParser {
         let rows: [[String]]
     }
 
-    // MARK: - Tables (instance + static helpers for CLI debug)
-    
+    // MARK: - Tables (shared helper for both instance and static debug usage)
+
     static func looksLikeTableHeaderStatic(_ headerLine: String, separatorLine: String) -> Bool {
-        // header: contains |, separator: --- / :---: style
-        let headerTrimmed = headerLine.trimmingCharacters(in: .whitespaces)
-        let sepTrimmed = separatorLine.trimmingCharacters(in: .whitespaces)
-        guard headerTrimmed.contains("|") else { return false }
-        
-        // e.g. | --- | :---: | ---: |
-        let pattern = #"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return false }
-        let range = NSRange(location: 0, length: (sepTrimmed as NSString).length)
-        return regex.firstMatch(in: sepTrimmed, options: [], range: range) != nil
-    }
-    
-    static func parseTableStatic(from lines: [String], startIndex: Int) -> (header: [String], rows: [[String]], consumed: Int) {
-        let headerLine = lines[startIndex]
-        let header = splitTableRowStatic(headerLine)
-        var rows: [[String]] = []
-        
-        var i = startIndex + 2
-        while i < lines.count {
-            let line = lines[i]
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty { break }
-            if !trimmed.contains("|") { break }
-            rows.append(splitTableRowStatic(line))
-            i += 1
-        }
-        
-        return (header, rows, i - startIndex)
-    }
-    
-    private static func splitTableRowStatic(_ line: String) -> [String] {
-        var s = line.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("|") { s.removeFirst() }
-        if s.hasSuffix("|") { s.removeLast() }
-        
-        return s
-            .split(separator: "|", omittingEmptySubsequences: false)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-    }
-    
-    private func looksLikeTableHeader(_ headerLine: String, separatorLine: String) -> Bool {
         // header: contains |, separator: --- / :---: style
         let headerTrimmed = headerLine.trimmingCharacters(in: .whitespaces)
         let sepTrimmed = separatorLine.trimmingCharacters(in: .whitespaces)
@@ -1082,6 +1041,38 @@ private final class NativeMarkdownParser {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return false }
         let range = NSRange(location: 0, length: (sepTrimmed as NSString).length)
         return regex.firstMatch(in: sepTrimmed, options: [], range: range) != nil
+    }
+
+    static func parseTableStatic(from lines: [String], startIndex: Int) -> (header: [String], rows: [[String]], consumed: Int) {
+        let headerLine = lines[startIndex]
+        let header = splitTableRowStatic(headerLine)
+        var rows: [[String]] = []
+
+        var i = startIndex + 2
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { break }
+            if !trimmed.contains("|") { break }
+            rows.append(splitTableRowStatic(line))
+            i += 1
+        }
+
+        return (header, rows, i - startIndex)
+    }
+
+    private static func splitTableRowStatic(_ line: String) -> [String] {
+        var s = line.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("|") { s.removeFirst() }
+        if s.hasSuffix("|") { s.removeLast() }
+
+        return s
+            .split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    private func looksLikeTableHeader(_ headerLine: String, separatorLine: String) -> Bool {
+        Self.looksLikeTableHeaderStatic(headerLine, separatorLine: separatorLine)
     }
 
     private func parseTable(from lines: [String], startIndex: Int) -> (ParsedTable, consumed: Int) {
@@ -1111,16 +1102,7 @@ private final class NativeMarkdownParser {
     }
 
     private func splitTableRow(_ line: String) -> [String] {
-        // Supports:
-        // - | a | b |
-        // - a | b
-        var s = line.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("|") { s.removeFirst() }
-        if s.hasSuffix("|") { s.removeLast() }
-
-        return s
-            .split(separator: "|", omittingEmptySubsequences: false)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+        Self.splitTableRowStatic(line)
     }
 
     private func renderTable(_ table: ParsedTable) -> NSAttributedString {
