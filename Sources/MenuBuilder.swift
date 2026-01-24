@@ -168,6 +168,16 @@ class MenuBuilder {
         copyFullContentItem.target = appDelegate
         editMenu.addItem(copyFullContentItem)
         
+        // Copy Path
+        let copyPathItem = NSMenuItem(
+            title: "Copy Path",
+            action: #selector(AppDelegate.copyPath),
+            keyEquivalent: "c"
+        )
+        copyPathItem.keyEquivalentModifierMask = [.command, .option]
+        copyPathItem.target = appDelegate
+        editMenu.addItem(copyPathItem)
+        
         // Select All
         let selectAllItem = NSMenuItem(
             title: "Select All",

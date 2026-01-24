@@ -119,6 +119,14 @@ final class MarkdownWindowController: NSObject {
         pasteboard.setString(content, forType: .string)
     }
 
+    @objc func copyPath() {
+        guard let path = currentFilePath else { return }
+        
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(path, forType: .string)
+    }
+
     private func showError(_ message: String) {
         let alert = NSAlert()
         alert.messageText = "Error"
