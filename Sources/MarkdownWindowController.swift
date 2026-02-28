@@ -44,7 +44,7 @@ final class MarkdownWindowController: NSObject {
             self.window.center()
         }
 
-        // renderer（Native-only）
+        // Native-only renderer.
         let layoutSize = self.window.contentLayoutRect.size
         let fallbackSize = self.window.contentRect(forFrameRect: self.window.frame).size
         let size = (layoutSize.width > 0 && layoutSize.height > 0) ? layoutSize : fallbackSize
@@ -163,4 +163,3 @@ extension MarkdownWindowController: FileHandlerDelegate {
         }
     }
 }
-

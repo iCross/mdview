@@ -2,8 +2,8 @@
 
 This tests the **`wgcf`** format.
 
-- **`wgcf`**: 帳號註冊與配置生成。
-- **`wireproxy`**: 隧道建立與 SOCKS5 轉換。
+- **`wgcf`**: Account registration and configuration generation.
+- **`wireproxy`**: Tunnel setup and SOCKS5 conversion.
 
 Regular code: `wgcf`
 

@@ -1,13 +1,13 @@
-這是一個純文字檔案測試
+This is a plain-text fixture.
 
-測試內容：
-1. 純文字應該可以正常開啟
-2. Window title 應該只顯示檔名 "test.txt"
-3. 不應該有 "Markdown Viewer -" 前綴
+Test coverage:
+1. Plain text should open successfully.
+2. The window title should show only the file name, "test.txt".
+3. The title should not include a "Markdown Viewer -" prefix.
 
-特殊字元測試：
-- `反引號`
-- **星號**（不會被渲染為粗體）
-- # 這不是標題
+Literal character coverage:
+- `backticks`
+- **asterisks** (not rendered as bold in plain-text mode)
+- # this is not a heading
 
-結束。
+End.

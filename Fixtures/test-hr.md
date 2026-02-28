@@ -1,15 +1,15 @@
-# 橫線渲染測試
+# Horizontal Rule Rendering Test
 
-這是第一段文字。
-
----
-
-這是橫線後的文字。
-
-## 第二個標題
-
-另一段文字。
+This is the first paragraph.
 
 ---
 
-最後一段。
+This text appears after the horizontal rule.
+
+## Second Heading
+
+Another paragraph.
+
+---
+
+Final paragraph.

@@ -1,86 +1,172 @@
-# mdview (`mdview`) — LLM project entry
+# mdview
 
-## Purpose
-macOS Markdown reader (AppKit). **Read-only**: reads local `.md` / `.markdown` (and plain `.txt` as text), renders to a window, supports drag & drop and auto-reload on file changes.
+`mdview` is a native macOS Markdown reader built with Swift and AppKit. It focuses on fast local-file viewing, predictable automation hooks, and a renderer that stays close to macOS text-system behavior instead of embedding a browser view.
 
-## Most used commands
+## What stands out
+
+- Native `NSTextView` rendering with selectable text, system typography, dark mode, zoom controls, and standard macOS menus.
+- File-oriented workflow: open `.md`, `.markdown`, and `.txt` files from the CLI, Finder, drag and drop, or an already-running app instance.
+- Auto-reload on file changes using `DispatchSource`, so edits appear without reopening the document.
+- Multiple document windows with duplicate-open detection: opening an already-visible file reloads and focuses the existing window.
+- Read-only ergonomics: copy selected text, copy full document content, copy the current file path, search with the native find UI, and switch themes at runtime.
+- Markdown coverage for headings, paragraphs, links, emphasis, inline code, fenced code blocks, syntax highlighting, lists, task lists, blockquotes, horizontal rules, tables, images, and Mermaid diagrams.
+- Automation-first test hooks: deterministic text rendering, parser dumps, skeleton layout checks, smoke tests, and screenshot capture with scroll targeting.
+
+## Installation
+
+Requirements:
+
+- macOS 10.15 or newer
+- Swift 5.9 or newer
+- Xcode command line tools
+
+Build the debug binary:
+
+```bash
+make debug
+```
+
+Build an optimized release binary:
+
+```bash
+make release
+```
+
+The build creates `./mdview` as a symlink to the SwiftPM product under `.build/`.
+
+## Usage
+
+Open one file:
+
+```bash
+./mdview README.md
+```
+
+Open multiple files:
+
+```bash
+./mdview Fixtures/test.md Fixtures/table_width.md
+```
+
+Keep the process attached to the terminal:
+
+```bash
+./mdview --wait README.md
+```
+
+Launch without activating the app, useful for background jobs and automation:
+
+```bash
+./mdview --no-activate README.md
+```
+
+Force a theme:
+
+```bash
+./mdview --theme=dark README.md
+```
+
+Try the AST pipeline:
+
+```bash
+./mdview --pipeline=ast README.md
+```
+
+## CLI Reference
+
+```text
+mdview [options] [file.md ...]
+
+Options:
+  --help, -h
+  --wait, --debug
+  --no-activate
+  --theme=system|light|dark
+  --pipeline=regex|ast
+  --ast
+  --smoke-test
+  --screenshot <out.png>
+  --screenshot=<out.png>
+  --screenshot-full
+  --screenshot-scroll-to <text>
+  --screenshot-scroll-y <number>
+  --screenshot-delay <sec>
+  --screenshot-delay=<sec>
+
+Debug and test modes:
+  --dump <file.md>
+  --render-text <file.md>
+  --skeleton-check
+  --highlightr-check
+```
+
+Default launch behavior detaches from the terminal, similar to `open`. Use `--wait` or `--debug` when you want the process to remain attached.
+
+## Rendering Notes
+
+`mdview` currently keeps two Markdown pipelines:
+
+- `regex`: the default production path. It includes the widest local feature coverage.
+- `ast`: an incremental `swift-markdown` pipeline. It falls back to the default renderer for tables, task lists, and images so unsupported syntax does not disappear.
+
+Mermaid code fences are rendered as the original fenced code block plus a diagram inserted below it. Diagram images are loaded through `mermaid.ink` in the background; PNG is preferred where it gives better AppKit fidelity.
+
+Remote images are also loaded asynchronously. Rendering never blocks on network requests.
+
+## Development
+
+Common commands:
+
 ```bash
 make debug
 make test
 make smoke
-
-./mdview Fixtures/test.md
-./mdview Fixtures/test.md Fixtures/table_width.md
-./mdview --theme=dark Fixtures/test.md
-./mdview --help
+make clean
 ```
 
-## CLI (source of truth: `Sources/main.swift`)
-- **Attach/detach**: default **detaches** (terminal returns immediately, similar to `open`); use `--wait` (or `--debug`) to keep the process attached
-- **Foreground/background**: `--no-activate` (recommended for background jobs `&` / subprocesses / CI to avoid being killed by the system)
-- **Theme**: `--theme=system|light|dark` (default: system; can also switch via menu `View → Theme`)
-- **Markdown pipeline**：`--pipeline=regex|ast`、`--ast`
-- **GUI smoke**: `--smoke-test` (create a window, then exit automatically)
-- **Mermaid (default)**: for ` ```mermaid ` code blocks, the renderer **keeps the code block** and inserts a diagram below (via `mermaid.ink`; prefers PNG for fidelity; requires network; loads non-blockingly)
-- **GUI screenshot (CI/LLM visual verification)**:
-  - `--screenshot <out.png>`, `--screenshot-delay <sec>` (default: 1.0)
-  - `--screenshot-scroll-to <text>` (recommended: ensure the target block is within the screenshot)
-  - `--screenshot-scroll-y <number>`
-  - `--screenshot-full` (has a height limit; if it fails, use scroll-to)
-- **No-GUI debug/tests**:
-  - `--dump <file.md>` (print parse output suitable for string comparisons)
-  - `--render-text <file.md>` (print rendered plain text; deterministic regression)
-  - `--skeleton-check` (width skeleton regression check: avoid per-character wrapping)
-  - `--highlightr-check` (verify Highlightr / JSCore / resources)
-  - Note: these debug/test flags always run in the current process (no handoff to an existing instance) to ensure you exercise the latest build.
+`make test` builds the app, ad-hoc signs the SwiftPM product, and runs the Swift test runner. The tests cover repository structure, renderer regressions, CLI behavior, screenshot output contracts, Mermaid URL encoding, Highlightr setup, file reading, file watching, and Makefile safeguards.
 
-## Test output contract (for automation/LLM)
-- **screenshot**: stdout prints
-  - `SCREENSHOT_OK <path>` (exit 0)
-  - `SCREENSHOT_FAIL <path>` (exit 1)
-  - `SCREENSHOT_TIMEOUT <path>` (exit 2)
-  - `SCREENSHOT_SCROLL_TO_NOT_FOUND <text> <path>` (exit 1)
-- **smoke**: stdout prints `SMOKE_OK` (exit 0) or `SMOKE_FAIL` (exit 1)
+Automation output contracts:
 
-## Important invariants (common regression sources)
-- **No per-character wrapping**: `NSTextContainer` width must track `NSScrollView` visible width, and geometry changes must force reflow (see `NativeMarkdownView.syncTextContainerWidth()`).
-- **All automation paths must have timeouts**: tests and screenshot/smoke must exit on their own (Makefile / test runner use timeout + kill).
-- **Horizontal rules (---)**:
-  - Render as a long left-aligned line of 100 `─` characters with `.byClipping` to avoid wrapping on narrow widths.
-  - Update both `NativeMarkdownView.renderHorizontalRule()` (regex pipeline) and `ASTMarkdownRenderer.visitThematicBreak` (AST pipeline) together if you change length or styling.
-  - Regex pipeline currently triggers on trimmed lines exactly equal to `---`, `----`, or `-----`; other HR forms (e.g., `* * *`, `___`) are ignored.
+- Screenshot success: `SCREENSHOT_OK <path>` with exit code `0`
+- Screenshot failure: `SCREENSHOT_FAIL <path>` with exit code `1`
+- Screenshot timeout: `SCREENSHOT_TIMEOUT <path>` with exit code `2`
+- Scroll target missing: `SCREENSHOT_SCROLL_TO_NOT_FOUND <text> <path>` with exit code `1`
+- Smoke success: `SMOKE_OK` with exit code `0`
+- Smoke failure: `SMOKE_FAIL` with exit code `1`
 
-## Code entry points (recommended reading order)
-- `Sources/main.swift`: CLI flags / test-mode entry points
-- `Sources/AppDelegate.swift`: windows, file loading, file watching, screenshot/smoke flows
-- `Sources/NativeMarkdownView.swift`: native renderer (layout/width/screenshot/scroll-to are key)
-- `Sources/ASTMarkdownRenderer.swift`: AST pipeline (`swift-markdown`)
-- `Sources/FileHandler.swift`: file reading + file change watching
-- `Sources/MenuBuilder.swift`: menus / shortcuts
-- `Tests/test_runner.swift`: test entry point
+## Architecture
 
-## Development notes
-- **CLI flags**: If you add/change CLI flags, update `--help` in `Sources/main.swift` and test coverage in `Tests/test_runner.swift`.
-- **Layout changes**: If you change layout (quote/table/code block), add at least one regression test via `--render-text` and `--screenshot-scroll-to`.
+Recommended reading order:
 
-## FAQ
-### Why do I see `IMKCFRunLoopWakeUpReliable` / `mach port` error logs?
-This is usually a **macOS InputMethodKit (IMK) / TextKit** system log emitted while initializing the text input subsystem (this project does not print that string). The message `error messaging the mach port for IMKCFRunLoopWakeUpReliable` generally means IMK attempted to wake a run loop / communicate via a Mach port and the port was unavailable. In most cases it **does not affect functionality** and can be ignored.
+- `Sources/main.swift`: CLI parsing, detach behavior, validation, and test-mode entry points.
+- `Sources/AppDelegate.swift`: app lifecycle, single-instance handoff, windows, screenshot and smoke flows.
+- `Sources/MarkdownWindowController.swift`: one document window, renderer ownership, drag and drop, file watching.
+- `Sources/NativeMarkdownView.swift`: native Markdown rendering, layout, parsing, screenshots, and scroll targeting.
+- `Sources/ASTMarkdownRenderer.swift`: incremental `swift-markdown` renderer.
+- `Sources/RemoteImageAttachment.swift`: non-blocking remote image loading and Mermaid PNG fallback behavior.
+- `Sources/FileHandler.swift`: file reading and file change watching.
+- `Sources/MenuBuilder.swift`: macOS menu structure and shortcuts.
+- `Tests/test_runner.swift`: regression test entry point.
 
-Why it shows up here:
-- `mdview` renders with `NSTextView` (read-only, but still part of the text input system), so IMK may be initialized when the window/text system becomes active.
+Key invariants:
 
-What to do:
-- If IME composition (e.g. Zhuyin/Pinyin candidate window) works normally, treat it as benign noise.
-- If you need clean automation logs, prefer checking `stdout` only (or filter known-noisy `stderr` strings).
-- Launching as a `.app bundle` can reduce the likelihood (more macOS-native launch context).
+- Text container width must track the scroll view's visible width to prevent per-character wrapping.
+- Automation paths must exit on their own; tests and screenshot modes should never depend on manual window closure.
+- Horizontal rules are rendered as a long left-aligned clipped line in both the regex and AST pipelines.
+- CLI debug and test modes run in the current process instead of handing off to an existing app instance.
 
-References (similar reports in other projects):
-- [electron/electron#45002](https://github.com/electron/electron/issues/45002)
-- [wezterm/wezterm#7249](https://github.com/wezterm/wezterm/issues/7249)
+## Troubleshooting
 
-## In environments where the GUI subprocess cannot run
-By default, `make test` treats "mdview subprocess cannot execute" as a failure (to avoid hiding regressions). If you must skip in a special environment, use:
+### `IMKCFRunLoopWakeUpReliable` or Mach port logs
+
+These messages are usually macOS InputMethodKit or TextKit system logs emitted while the text input subsystem initializes. The project does not print those strings. They are generally harmless if text selection, copying, and input-method behavior work normally.
+
+For cleaner automation logs, assert against `stdout` contracts and filter known noisy `stderr` strings when needed.
+
+### GUI subprocess cannot run
+
+By default, `make test` treats a non-runnable GUI subprocess as a failure. In a constrained environment where GUI subprocess execution is expected to fail, opt into the skip explicitly:
 
 ```bash
 MDVIEWER_ALLOW_SKIP_SUBPROCESS_TESTS=1 make test

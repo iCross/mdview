@@ -1226,7 +1226,7 @@ private final class NativeMarkdownParser {
     private func formatInline(_ text: String, baseAttributes: [NSAttributedString.Key: Any]) -> NSAttributedString {
         let attributed = NSMutableAttributedString(string: text, attributes: baseAttributes)
         
-        // images：![alt](url)
+        // Images: ![alt](url)
         applyInlineImages(in: attributed, baseAttributes: baseAttributes)
         
         // Special case: **`code`** (bold code span) - handle before regular code spans and bold
@@ -1252,7 +1252,7 @@ private final class NativeMarkdownParser {
             }
         }
         
-        // code span：`code` (regular, not bold)
+        // Code span: `code` (regular, not bold)
         applyInlinePattern(
             pattern: "`([^`]+)`",
             in: attributed,
@@ -1267,10 +1267,10 @@ private final class NativeMarkdownParser {
             ], range: range)
         }
         
-        // bold：**text** / __text__ (allow inline code inside)
+        // Bold: **text** / __text__ (allow inline code inside)
         applyBold(in: attributed)
         
-        // links：[text](url)
+        // Links: [text](url)
         applyInlinePattern(
             pattern: "\\[([^\\]]+?)\\]\\(([^\\)]+?)\\)",
             in: attributed,
@@ -1287,7 +1287,7 @@ private final class NativeMarkdownParser {
             }
         }
         
-        // strikethrough：~~text~~
+        // Strikethrough: ~~text~~
         applyInlinePattern(
             pattern: "~~(.+?)~~",
             in: attributed,
@@ -1299,7 +1299,7 @@ private final class NativeMarkdownParser {
             ], range: range)
         }
         
-        // italic：*text* / _text_
+        // Italic: *text* / _text_
         // Conservative rule to avoid mis-detecting list markers as italics: require at least 2 characters of content.
         applyInlinePattern(
             pattern: "(?<!\\*)\\*(.{2,}?)\\*(?!\\*)",
@@ -1606,4 +1606,3 @@ private enum NativeCodeHighlighter {
         }
     }
 }
-
