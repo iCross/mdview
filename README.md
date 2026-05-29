@@ -2,6 +2,8 @@
 
 `mdview` is a native macOS Markdown reader built with Swift and AppKit. It focuses on fast local-file viewing, predictable automation hooks, and a renderer that stays close to macOS text-system behavior instead of embedding a browser view.
 
+![mdview rendering a Markdown document in a native macOS window](Docs/mdview-screenshot.jpg)
+
 ## What stands out
 
 - Native `NSTextView` rendering with selectable text, system typography, dark mode, zoom controls, and standard macOS menus.
