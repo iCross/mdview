@@ -687,6 +687,22 @@ func testMakefile(_ runner: TestRunner) {
     runner.run("Makefile defines release target") {
         makefileContent.contains("release:")
     }
+
+    runner.run("Makefile defines dist target") {
+        makefileContent.contains("dist:")
+    }
+
+    runner.run("Makefile defines GitHub release target") {
+        makefileContent.contains("github-release:")
+    }
+
+    runner.run("Makefile GitHub release target uses gh release create") {
+        makefileContent.contains("gh release create")
+    }
+
+    runner.run("Makefile GitHub release target pins tag creation to current commit") {
+        makefileContent.contains("--target \"$$(git rev-parse HEAD)\"")
+    }
     
     runner.run("Makefile defines clean target") {
         makefileContent.contains("clean:")

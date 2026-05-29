@@ -34,6 +34,20 @@ make release
 
 The build creates `./mdview` as a symlink to the SwiftPM product under `.build/`.
 
+Package a release archive:
+
+```bash
+make dist TAG=v0.1.0
+```
+
+Create a GitHub Release and upload the archive with GitHub CLI:
+
+```bash
+make github-release TAG=v0.1.0
+```
+
+`github-release` uses `gh release create` against the repository inferred from the `public` remote. Override it with `GH_REPO=owner/repo`. The target creates a release for the current commit with `--target`, but it does not run `git push` to any remote.
+
 ## Usage
 
 Open one file:

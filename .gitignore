@@ -7,6 +7,7 @@ mdviewer
 mdviewer.dSYM/
 .build/
 .swiftpm/
+dist/
 
 # Local scratch / screenshots (for agent verification)
 .tmp/
@@ -16,4 +17,3 @@ Highlightr/
 MarkdownAttributedString/
 MarkdownToAttributedString/
 STTextView/
-

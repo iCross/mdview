@@ -2,6 +2,13 @@
 # Build the native macOS app with Swift
 
 APP_NAME = mdview
+GH_REPO ?=
+GH_REPO_FROM_PUBLIC = $$(git remote get-url public 2>/dev/null | sed -E 's|^git@github.com:||; s|^https://github.com/||; s|\.git$$||')
+TAG ?= $(shell git describe --tags --exact-match 2>/dev/null || true)
+VERSION ?= $(if $(TAG),$(TAG),$(shell git rev-parse --short HEAD 2>/dev/null || echo dev))
+ARCH ?= $(shell uname -m)
+DIST_DIR = dist
+RELEASE_ARCHIVE = $(DIST_DIR)/$(APP_NAME)-$(VERSION)-macos-$(ARCH).tar.gz
 SOURCES = Sources/main.swift \
           Sources/AppDelegate.swift \
           Sources/MarkdownRenderable.swift \
@@ -19,7 +26,7 @@ FRAMEWORKS = -framework AppKit
 DEBUG_FLAGS = -g -Onone
 RELEASE_FLAGS = -O -whole-module-optimization
 
-.PHONY: all debug release clean run run-empty run-ci run-empty-ci test smoke help
+.PHONY: all debug release dist github-release github-release-upload check-github-release clean run run-empty run-ci run-empty-ci test smoke help
 
 # Default target: Debug
 all: debug
@@ -43,6 +50,53 @@ release: $(SOURCES)
 	@ln -sf .build/release/$(APP_NAME) ./$(APP_NAME)
 	@echo "✅ Built: ./$(APP_NAME)"
 
+# Package the release binary for GitHub Releases
+dist: release
+	@echo "📦 Packaging $(RELEASE_ARCHIVE)..."
+	@mkdir -p "$(DIST_DIR)"
+	@tmp_dir=$$(mktemp -d); \
+	trap 'trash "$$tmp_dir" >/dev/null 2>&1 || true' EXIT; \
+	package_dir="$(APP_NAME)-$(VERSION)-macos-$(ARCH)"; \
+	mkdir -p "$$tmp_dir/$$package_dir"; \
+	cp ".build/release/$(APP_NAME)" "$$tmp_dir/$$package_dir/$(APP_NAME)"; \
+	cp "README.md" "$$tmp_dir/$$package_dir/README.md"; \
+	tar -czf "$(RELEASE_ARCHIVE)" -C "$$tmp_dir" "$$package_dir"
+	@echo "✅ Packaged: $(RELEASE_ARCHIVE)"
+
+check-github-release:
+	@if [ -z "$(TAG)" ]; then \
+		echo "Set TAG, for example: make github-release TAG=v0.1.0"; \
+		exit 1; \
+	fi
+	@repo="$(GH_REPO)"; \
+	if [ -z "$$repo" ]; then repo="$(GH_REPO_FROM_PUBLIC)"; fi; \
+	if [ -z "$$repo" ]; then \
+		echo "Set GH_REPO=owner/repo or configure a public remote"; \
+		exit 1; \
+	fi
+	@command -v gh >/dev/null || { echo "gh is required"; exit 1; }
+	@gh auth status >/dev/null
+
+# Create a GitHub Release and upload the packaged binary.
+# This uses gh's Release API. It does not run git push to the public remote.
+github-release: check-github-release dist
+	@repo="$(GH_REPO)"; \
+	if [ -z "$$repo" ]; then repo="$(GH_REPO_FROM_PUBLIC)"; fi; \
+	echo "🚀 Creating GitHub release $(TAG)..."; \
+	gh release create "$(TAG)" "$(RELEASE_ARCHIVE)#$(APP_NAME) macOS $(ARCH)" \
+		--repo "$$repo" \
+		--target "$$(git rev-parse HEAD)" \
+		--generate-notes
+
+# Upload or replace the packaged binary on an existing GitHub Release.
+github-release-upload: check-github-release dist
+	@repo="$(GH_REPO)"; \
+	if [ -z "$$repo" ]; then repo="$(GH_REPO_FROM_PUBLIC)"; fi; \
+	echo "⬆️ Uploading $(RELEASE_ARCHIVE) to release $(TAG)..."; \
+	gh release upload "$(TAG)" "$(RELEASE_ARCHIVE)#$(APP_NAME) macOS $(ARCH)" \
+		--repo "$$repo" \
+		--clobber
+
 # Clean build artifacts
 clean:
 	@echo "🧹 Cleaning build artifacts..."
@@ -50,6 +104,7 @@ clean:
 	@if [ -e "./$(APP_NAME)" ]; then trash "./$(APP_NAME)"; fi
 	@if [ -e "./mdviewer" ]; then trash "./mdviewer"; fi
 	@if [ -d ".build" ]; then trash ".build"; fi
+	@if [ -d "$(DIST_DIR)" ]; then trash "$(DIST_DIR)"; fi
 	@echo "✅ Clean complete"
 
 # Run (with a fixture file; interactive; expected to stay running)
@@ -89,6 +144,9 @@ help:
 	@echo "  make              - Build Debug"
 	@echo "  make debug        - Build Debug"
 	@echo "  make release      - Build Release"
+	@echo "  make dist         - Build Release and package dist archive"
+	@echo "  make github-release TAG=v0.1.0 - Create GitHub Release with gh"
+	@echo "  make github-release-upload TAG=v0.1.0 - Upload archive to an existing GitHub Release"
 	@echo "  make clean        - Clean build artifacts"
 	@echo "  make run          - Build & run (with Fixtures/test.md)"
 	@echo "  make run-empty    - Build & run (no file)"
